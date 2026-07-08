@@ -1,0 +1,17 @@
+{
+  "name": "notebooklm-qol",
+  "version": "1.0.1",
+  "private": true,
+  "description": "Free quality-of-life Chrome extension for NotebookLM: batch generate per source, rename by source, bulk operations on Studio outputs and sources.",
+  "scripts": {
+    "build": "./build.sh",
+    "test": "tsx --test src/lib/template.test.ts src/lib/dedupe.test.ts src/lib/queue.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.6.0"
+  }
+}

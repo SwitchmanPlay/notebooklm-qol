@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "NotebookLM QoL",
+  "version": "1.0.1",
+  "description": "Free quality-of-life tools for NotebookLM: batch generate per source, rename by source, bulk download/delete for outputs and sources.",
+  "minimum_chrome_version": "120",
+  "host_permissions": ["https://notebooklm.google.com/*"],
+  "permissions": ["storage", "downloads", "notifications"],
+  "background": {
+    "service_worker": "dist/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://notebooklm.google.com/*"],
+      "js": ["dist/content.js"],
+      "css": ["dist/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "NotebookLM QoL"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

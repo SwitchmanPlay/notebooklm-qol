@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body {
+        width: 320px;
+        margin: 0;
+        padding: 16px;
+        font: 400 13px/1.45 "Google Sans", Roboto, sans-serif;
+        color: #202124;
+        background: #fff;
+      }
+      @media (prefers-color-scheme: dark) {
+        body { background: #2d2e31; color: #e8eaed; }
+        input[type="text"] { background: #202124; color: #e8eaed; border-color: #5f6368; }
+      }
+      h1 { font-size: 15px; margin: 0 0 12px; }
+      label.field { display: block; font-weight: 600; margin: 12px 0 4px; }
+      input[type="text"] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 7px 9px;
+        border: 1px solid #dadce0;
+        border-radius: 8px;
+        font: inherit;
+      }
+      .preview { opacity: 0.75; font-size: 12px; margin-top: 5px; min-height: 16px; }
+      .vars { opacity: 0.6; font-size: 11px; margin-top: 3px; }
+      .toggle { display: flex; align-items: center; gap: 8px; margin: 8px 0; cursor: pointer; }
+      .saved { color: #188038; font-size: 12px; height: 14px; margin-top: 8px; }
+      hr { border: none; border-top: 1px solid rgba(128,134,139,.3); margin: 14px 0; }
+      a { color: #8ab4f8; }
+    </style>
+  </head>
+  <body>
+    <h1>NotebookLM QoL</h1>
+
+    <label class="field" for="template">Rename template</label>
+    <input type="text" id="template" />
+    <div class="preview" id="preview"></div>
+    <div class="vars">Variables: {source} {type} {date} {n}</div>
+
+    <hr />
+    <label class="toggle"><input type="checkbox" id="f-studioBulk" /> Studio multi-select &amp; bulk actions</label>
+    <label class="toggle"><input type="checkbox" id="f-batchGenerate" /> Batch generate per source</label>
+    <label class="toggle"><input type="checkbox" id="f-sourceBulk" /> Source bulk delete &amp; duplicates</label>
+
+    <div class="saved" id="saved"></div>
+    <script src="dist/popup.js"></script>
+  </body>
+</html>
