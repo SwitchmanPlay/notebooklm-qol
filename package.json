@@ -1,6 +1,6 @@
 {
   "name": "notebooklm-qol",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "Free quality-of-life Chrome extension for NotebookLM: batch generate per source, rename by source, bulk operations on Studio outputs and sources.",
   "scripts": {

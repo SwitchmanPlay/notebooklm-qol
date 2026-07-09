@@ -2,7 +2,7 @@
 
 # NotebookLM QoL
 
-![Version](https://img.shields.io/badge/version-1.0.1-blue)
+![Version](https://img.shields.io/badge/version-1.0.2-blue)
 ![Price](https://img.shields.io/badge/price-100%25_free-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Chrome](https://img.shields.io/badge/Chrome-120%2B-ffc107)
