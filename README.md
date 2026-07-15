@@ -1,6 +1,6 @@
 ![NotebookLM QoL](assets/hero.png)
 
-# NotebookLM QoL
+# ⚡ NotebookLM QoL — Batch Generate / Delete / Rename
 
 ![Version](https://img.shields.io/badge/version-1.5.0-blue)
 ![Price](https://img.shields.io/badge/price-100%25_free-brightgreen)
@@ -9,29 +9,64 @@
 ![Manifest](https://img.shields.io/badge/Manifest-V3-4285f4)
 ![Tracking](https://img.shields.io/badge/tracking-none-success)
 
-A **fully free, open-source** Chrome extension that adds quality-of-life bulk operations to [NotebookLM](https://notebooklm.google.com). It is **not** an importer — it makes managing what's already in your notebooks less painful.
+**The quality-of-life upgrades NotebookLM is missing — made by a student, for students.** 🎓
 
-[**Install from the Chrome Web Store**](https://chromewebstore.google.com/detail/notebooklm-qol/fdkgenbncmbhpdhfccnodfnpmmmgfikn)
+Generate a quiz for *every* chapter in one go. Rename ten “Untitled quiz” after their sources automatically. Download everything with one click — and watch it happen on a live progress bar. Fully free, open source, no account, no tracking.
+
+👉 [**Install from the Chrome Web Store**](https://chromewebstore.google.com/detail/notebooklm-qol/fdkgenbncmbhpdhfccnodfnpmmmgfikn)
 
 ![Promo](assets/promo.png)
 
-## Features (v1.5)
+---
 
-- **⚡ Batch generate — one modal, one output per source.** Pick your sources and output type (Audio Overview, Video Overview, Quiz, Report, …), press **Generate batch**, then finish in NotebookLM's **own** options dialog — format tiles, length, language, and even a **custom text prompt** ("what should the hosts focus on", video topic, slide-deck description, …). The extension splits your single request into one generation **per source** at the network level: no dialog replay, no clicking, your options and prompt apply to every source. A bottom-right panel with a **Cancel** button appears while the requests are being sent.
-- **Legacy batch mode** — a checkbox in the same modal switches to the older engine that replays NotebookLM's dialog once per source (slower, DOM-driven). Kept as a fallback in case Google changes their internal request format; format-tile choices apply, language/custom prompt don't.
-- **Rename by template** — batch results are automatically renamed after their source using a template (`{source} — {type}` by default; variables: `{source}` `{type}` `{date}` `{n}`). Renames are stored persistently and applied as each generation finishes — even if you reload or come back to the tab hours later. **New in v1.4:** renames go through NotebookLM's own rename call — instant, nothing is clicked, no focus stealing — with the old inline-edit flow kept as an automatic fallback.
-- **Rename by source** — select **existing** outputs (even ones created long before installing the extension) and rename them after the source(s) they were generated from, in one click. Source information is read passively from NotebookLM's own network responses — no dialogs are opened, nothing is clicked.
+## ✨ What it does
+
+| | Feature | In one sentence |
+|---|---|---|
+| ⚡ | **Batch generate** | One output *per source* — quizzes, audio, video, slides… — from a single dialog, custom prompt included |
+| ✏️ | **Auto-rename** | `Chapter 3.pdf — Quiz` instead of ten identical “Untitled quiz” |
+| 🏷️ | **Rename by source** | Rename even *old* outputs after the sources they came from, in one click |
+| ⬇️ | **Instant bulk download** | Direct downloads via NotebookLM's own file URLs — no menu clicking |
+| 🗑️ | **Bulk delete** | Dozens of outputs or sources gone with a single confirmation |
+| 📊 | **Live progress bar** | See exactly how far your downloads and renames are |
+| 🧹 | **Duplicate finder** | Find duplicate sources by title, keep the first of each |
+
+---
+
+## ⚡ Batch generate — one modal, one output per source
+
+Pick your sources and output type (Audio Overview, Video Overview, Quiz, Report, …), press **Generate batch**, then finish in NotebookLM's **own** options dialog — format tiles, length, language, and even a **custom text prompt** (“what should the hosts focus on”, video topic, slide-deck description, …).
+
+The extension splits your single request into one generation **per source** at the network level: no dialog replay, no clicking, your options and prompt apply to every source. A bottom-right panel with a **Cancel** button appears while the requests are being sent.
+
+🧰 **Legacy batch mode** — a checkbox in the same modal switches to the older engine that replays NotebookLM's dialog once per source (slower, DOM-driven). Kept as a fallback in case Google changes their internal request format; format-tile choices apply, language/custom prompt don't.
+
+## ✏️ Renaming that just happens
+
+- **Rename by template** — batch results are automatically renamed after their source using a template (`{source} — {type}` by default; variables: `{source}` `{type}` `{date}` `{n}`). Renames are stored persistently and applied as each generation finishes — even if you reload or come back to the tab hours later.
+- **Instant since v1.4** ⚡ — renames go through NotebookLM's own rename call: nothing is clicked, no focus stealing, with the old inline-edit flow kept as an automatic fallback.
+- **Rename by source** 🏷️ — select **existing** outputs (even ones created long before installing the extension) and rename them after the source(s) they were generated from, in one click. Source information is read passively from NotebookLM's own network responses — no dialogs are opened, nothing is clicked.
+
+## ⬇️ Multi-select & instant downloads
+
 - **Multi-select Studio outputs** — always-visible checkboxes, a clickable **Select all outputs** header, plus an always-on bulk bar with a live count, one-click bulk **download** and bulk **delete** (single confirmation). Selection is tracked by artifact id, so it survives list reordering and re-renders.
-- **Instant bulk download (new in v1.3)** — audio, video, infographics and slide decks are downloaded **directly via the file URLs found in NotebookLM's own responses**: instant, no menu clicking, and the items don't even need to be scrolled into view. Files land auto-renamed in a `NotebookLM/` folder in Downloads. If a direct URL doesn't check out (the extension verifies the server is sending a real file, not an error page), it automatically falls back to clicking NotebookLM's own Download menu. Reports always use the click path; quizzes, flashcards and mind maps have no download in NotebookLM at all and are skipped with a toast.
-- **Live progress bar (new in v1.5)** — bulk downloads, bulk renames and the background auto-renames after a batch all show a progress bar at the bottom of the screen ("Downloading 3/7…", "Renaming 2/5…", "Auto-renaming 4/10…") instead of running invisibly.
+- **Instant bulk download** 🚀 — audio, video, infographics and slide decks are downloaded **directly via the file URLs found in NotebookLM's own responses**: instant, no menu clicking, and the items don't even need to be scrolled into view. Files land auto-renamed in a `NotebookLM/` folder in Downloads. If a direct URL doesn't check out (the extension verifies the server is sending a real file, not an error page), it automatically falls back to clicking NotebookLM's own Download menu. Reports always use the click path; quizzes, flashcards and mind maps have no download in NotebookLM at all and are skipped with a toast.
+- **Live progress bar** 📊 *(new in v1.5)* — bulk downloads, bulk renames and the background auto-renames after a batch all show a progress bar at the bottom of the screen (“Downloading 3/7…”, “Renaming 2/5…”, “Auto-renaming 4/10…”) instead of running invisibly.
 - **Batch queue panel** — the legacy queue panel (bottom right) shows per-job progress with **Stop after current** / **Resume**, survives reloads, and can be **collapsed** off-screen with the **»** button — a small **« Batch** tab on the screen edge brings it back.
-- **Bulk source management** — check sources (NotebookLM's own select-all works fine), then **Delete checked** in one go from the floating bar, or **Find duplicates** (title-based) and remove them keeping the first of each group.
 
-## Privacy
+## 🧹 Bulk source management
 
-No analytics, no servers, no accounts. The only host permission is `notebooklm.google.com`. All data stays in your browser.
+Check sources (NotebookLM's own select-all works fine), then **Delete checked** in one go from the floating bar, or **Find duplicates** (title-based) and remove them keeping the first of each group.
 
-## Install
+---
+
+## 🔒 Privacy
+
+No analytics. No servers. No accounts. The only host permission is `notebooklm.google.com`, and all data stays in your browser. Full policy: [PRIVACY.md](PRIVACY.md).
+
+---
+
+## 📦 Install
 
 **Chrome Web Store:** [NotebookLM QoL](https://chromewebstore.google.com/detail/notebooklm-qol/fdkgenbncmbhpdhfccnodfnpmmmgfikn)
 
@@ -42,45 +77,59 @@ No analytics, no servers, no accounts. The only host permission is `notebooklm.g
 3. Click **Load unpacked** and select this folder.
 4. Open NotebookLM — you'll see checkboxes in the Studio panel and a *⚡ Batch generate…* button under the create buttons.
 
-> After updating the extension, **reload any open NotebookLM tabs** — Chrome invalidates the old content script and buttons would otherwise fail with "Extension context invalidated".
+> ⚠️ After updating the extension, **reload any open NotebookLM tabs** — Chrome invalidates the old content script and buttons would otherwise fail with “Extension context invalidated”.
 
-## Development
+---
+
+## 🛠️ Development
 
 ```bash
 bash build.sh                      # bundles src/ -> dist/ with esbuild
 npx tsx --test src/lib/*.test.ts   # unit tests (pure logic)
 ```
 
-Architecture:
+**Architecture:**
 
 - `src/content/selectors.ts` — **every** DOM selector lives here, nothing else touches raw selectors.
 - `src/content/adapter.ts` — all NotebookLM actions (list/select/rename/delete/download/generate) via DOM automation.
-- `src/content/interceptor.ts` — MAIN-world script (injected at `document_start` by `inject.ts`) that passively parses NotebookLM's own Studio network responses (artifact ids, titles, types, status, **source ids** and **direct download URLs**) and, when armed, splits one user-made generation request into one request per source — custom prompts and options included. It also sends renames through NotebookLM's own rename RPC, reusing the auth token and URL parameters captured from the page's own requests (no token scraping). Fun fact learned the hard way: NotebookLM uses the **same internal type code for quizzes and flashcards**; the subtype hides deeper in the payload. Communicates with the content script via `CustomEvent`s only; if Google renames the RPC ids it degrades silently and the DOM features keep working.
+- `src/content/interceptor.ts` — MAIN-world script (injected at `document_start` by `inject.ts`) that passively parses NotebookLM's own Studio network responses (artifact ids, titles, types, status, **source ids** and **direct download URLs**) and, when armed, splits one user-made generation request into one request per source — custom prompts and options included. It also sends renames through NotebookLM's own rename RPC, reusing the auth token and URL parameters captured from the page's own requests (no token scraping). Fun fact learned the hard way: NotebookLM uses the **same internal type code for quizzes and flashcards**; the subtype hides deeper in the payload. 😅 Communicates with the content script via `CustomEvent`s only; if Google renames the RPC ids it degrades silently and the DOM features keep working.
 - `src/content/registry.ts` — content-script side: artifact ↔ sources registry + persistent auto-rename for split-mode batches.
 - `src/lib/` — pure, unit-tested logic: rename-template engine, duplicate normalizer, queue state machine.
-- `src/content/ui.ts` — injected UI (checkboxes, bulk bars, batch modal, queue panel, batch-cancel panel).
+- `src/content/ui.ts` — injected UI (checkboxes, bulk bars, batch modal, queue panel, progress bar, batch-cancel panel).
 - `src/background.ts` — notifications, download renaming via `downloads.onDeterminingFilename`, and **verified direct downloads**: the background starts the download from the network URL, checks the response is a real file (not an HTML error page) and reports back so the content script can fall back to the click path.
 
 There is no official NotebookLM API; everything works through the DOM plus passive network parsing. If Google changes the UI, fix `selectors.ts` first. Any selector failure disables its feature gracefully — the native page keeps working untouched.
 
-## Known limitations (v1.5)
+---
+
+## ⚠️ Known limitations (v1.5)
 
 - **Auto-renames apply only once a generation has finished** — NotebookLM rejects renames on in-progress items, so a rename can land a few seconds after the item appears. Since v1.4 the rename itself is an instant network call; if a visible title ever looks stale, a reload shows the server-side truth.
-- **Bulk downloads:** Chrome blocks multiple automatic downloads by default. The first time, click **Allow** on Chrome's "download multiple files" prompt (or allow it under Site settings → Automatic downloads for notebooklm.google.com), otherwise only the first file arrives.
+- **Bulk downloads:** Chrome blocks multiple automatic downloads by default. The first time, click **Allow** on Chrome's “download multiple files” prompt (or allow it under Site settings → Automatic downloads for notebooklm.google.com), otherwise only the first file arrives.
 - **Quizzes, flashcards and mind maps have no Download option in NotebookLM at all** — bulk download skips them and says so in a toast. Reports download via the click path (the item must be visible in the Studio list).
 - Batch **language** applies reliably to titles and Audio Overviews; Video Overview *content* may still come out in English — that appears to be a NotebookLM-side limitation, not an extension bug.
 - Renaming old outputs made from **many** sources names them after the first source plus `+N` (e.g. `Ch02.pdf +6 — Quiz`).
-- **Rename by source** needs the artifact data captured since the last page load; if you get a "no source data captured yet" toast, reload the page and let the Studio list load first. Mind Maps aren't covered by the network registry yet and fall back to their current title.
+- **Rename by source** needs the artifact data captured since the last page load; if you get a “no source data captured yet” toast, reload the page and let the Studio list load first. Mind Maps aren't covered by the network registry yet and fall back to their current title.
 - Duplicate detection is title-based (URL-based matching is implemented and tested in `src/lib/dedupe.ts`, but NotebookLM's source list doesn't expose URLs in the DOM).
 - Bulk download triggers individual downloads (auto-renamed) rather than a single ZIP.
 - Source-selection persistence and dashboard bulk-delete of notebooks are planned for a future version.
 
-## Changelog
+---
 
-- **1.5.0** — live progress bar at the bottom of the screen for bulk downloads, bulk renames and background auto-renames; refreshed project icon.
-- **1.4.0** — instant renames: batch auto-renames and ���rename by source” now use NotebookLM's own rename call instead of simulating menu clicks and typing (the DOM flow is kept as automatic fallback).
-- **1.3.1** — direct downloads are now verified (HTML error pages are detected, cancelled and automatically retried via the click path); README refresh.
-- **1.3.0** — instant network-based bulk downloads (audio/video/infographic/slide deck); fixed quizzes being labeled "Flashcards" in renames; Cancel button while a batch is being sent; collapsible queue panel; debug logging off.
-- **1.2.x** — unified batch modal (sources + type + options + custom prompt in one flow); fixed a false "batch cancelled" during fan-out; bulk bar no longer covers the last outputs; hardened renames against list re-renders.
-- **1.1.0** — network interceptor: custom prompt mode (split one request into per-source generations), rename by source for existing outputs.
-- **1.0.x** — initial release: batch generate (legacy engine), rename templates, multi-select bulk download/delete, bulk source management, duplicate finder.
+## 📜 Changelog
+
+- **1.5.0** 📊 — live progress bar at the bottom of the screen for bulk downloads, bulk renames and background auto-renames; refreshed project icon.
+- **1.4.0** ⚡ — instant renames: batch auto-renames and “rename by source” now use NotebookLM's own rename call instead of simulating menu clicks and typing (the DOM flow is kept as automatic fallback).
+- **1.3.1** 🛡️ — direct downloads are now verified (HTML error pages are detected, cancelled and automatically retried via the click path); README refresh.
+- **1.3.0** 🚀 — instant network-based bulk downloads (audio/video/infographic/slide deck); fixed quizzes being labeled “Flashcards” in renames; Cancel button while a batch is being sent; collapsible queue panel; debug logging off.
+- **1.2.x** 🧪 — unified batch modal (sources + type + options + custom prompt in one flow); fixed a false “batch cancelled” during fan-out; bulk bar no longer covers the last outputs; hardened renames against list re-renders.
+- **1.1.0** 🔌 — network interceptor: custom prompt mode (split one request into per-source generations), rename by source for existing outputs.
+- **1.0.x** 🎉 — initial release: batch generate (legacy engine), rename templates, multi-select bulk download/delete, bulk source management, duplicate finder.
+
+---
+
+## ❤️ Contributing
+
+Found a bug? Google redesigned something and a button vanished? [Open an issue](https://github.com/SwitchmanPlay/notebooklm-qol/issues) — selector fixes are usually quick.
+
+MIT licensed. Not a commercial product: no paid features, no subscriptions, the complete source code is right here.
