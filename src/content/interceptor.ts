@@ -50,16 +50,15 @@ type ParsedRequest = { sourceIds: string[]; outer: unknown[] }
     1: "Audio Overview",
     2: "Report",
     3: "Video Overview",
-    4: "Flashcards",
-    5: "Quiz",
+    4: "Flashcards", // v1.3: quiz & flashcards SHARE code 4 - subtype detected below
     7: "Infographic",
     8: "Slide Deck",
     9: "Data Table",
     10: "Mind Map",
   }
 
-  // v1.2 TEST BUILD: verbose logging. Filter the console by [nblm-qol].
-  const DEBUG = true
+  // Set to true for a verbose debug build. Filter the console by [nblm-qol].
+  const DEBUG = false
   const dbg = (...args: unknown[]): void => {
     if (DEBUG) console.info("[nblm-qol][net]", ...args)
   }
@@ -74,6 +73,14 @@ type ParsedRequest = { sourceIds: string[]; outer: unknown[] }
   // Safety valve: an armed split expires after 10 minutes so it can never
   // hijack an unrelated generation hours later.
   const splitActive = (): boolean => splitArmed && Date.now() - armedAt < 10 * 60 * 1000
+
+  // v1.3: user-requested abort of an in-flight fan-out (Cancel button in the
+  // batch panel). Checked between fan-out requests.
+  let splitAborted = false
+  window.addEventListener("nblmqol-split-abort", () => {
+    splitAborted = true
+    dbg("split abort requested")
+  })
 
   const emit = (name: string, detail: unknown): void => {
     window.dispatchEvent(new CustomEvent(name, { detail }))
@@ -117,6 +124,19 @@ type ParsedRequest = { sourceIds: string[]; outer: unknown[] }
           for (const a of (data as unknown[][])[0]) {
             if (!Array.isArray(a) || a.length < 5 || typeof a[0] !== "string") continue
             const typeCode = a[2] as number
+            // v1.3: quiz & flashcards share NotebookLM type code 4. The
+            // subtype lives in the options tuple: a[9][1][0] = 1 (flashcards)
+            // or 2 (quiz). Fall back to "Flashcards" when unreadable.
+            let typeLabel = TYPE_BY_CODE[typeCode] ?? `type ${typeCode}`
+            try {
+              if (typeCode === 4 && Array.isArray(a[9]) && Array.isArray((a[9] as unknown[])[1])) {
+                const sub = ((a[9] as unknown[])[1] as unknown[])[0]
+                if (sub === 2) typeLabel = "Quiz"
+                else if (sub === 1) typeLabel = "Flashcards"
+              }
+            } catch {
+              /* the label is a nice-to-have */
+            }
             let downloadUrl: string | null = null
             try {
               if (typeCode === 1 && Array.isArray(a[6]) && typeof a[6][3] === "string") downloadUrl = a[6][3] // audio
@@ -135,7 +155,7 @@ type ParsedRequest = { sourceIds: string[]; outer: unknown[] }
             artifacts.push({
               id: a[0],
               title: typeof a[1] === "string" ? a[1] : "",
-              type: TYPE_BY_CODE[typeCode] ?? `type ${typeCode}`,
+              type: typeLabel,
               status: a[4] === 1 ? "in_progress" : a[4] === 3 ? "completed" : `status ${a[4]}`,
               sourceIds: flattenIds(a[3]),
               downloadUrl,
@@ -218,6 +238,7 @@ type ParsedRequest = { sourceIds: string[]; outer: unknown[] }
       if (parsed) {
         dbg(`splitting fetch creation request into ${parsed.sourceIds.length} single-source request(s)`, parsed.sourceIds)
         splitArmed = false // one-shot: never split a request the user didn't arm
+        splitAborted = false
         const ids = parsed.sourceIds
         emit("nblmqol-split-start", { sourceIds: ids })
         // The page itself performs a normal single-source request (first
@@ -232,6 +253,11 @@ type ParsedRequest = { sourceIds: string[]; outer: unknown[] }
             /* the page sees the same error */
           }
           for (let i = 1; i < ids.length; i++) {
+            if (splitAborted) {
+              dbg(`fan-out aborted by user after ${i}/${ids.length} request(s)`)
+              emit("nblmqol-split-done", { succeeded, total: ids.length, sourceIds: ids, aborted: true })
+              return
+            }
             await sleep(1500) // be gentle - NotebookLM rate-limits bursts
             try {
               const r = await origFetch.call(window, input as RequestInfo, Object.assign({}, init, { body: buildBodyFor(bodyText, parsed, ids[i]) }))
@@ -292,6 +318,7 @@ type ParsedRequest = { sourceIds: string[]; outer: unknown[] }
         const parsed = parseStudioRequest(body)
         if (parsed) {
           splitArmed = false
+          splitAborted = false
           const ids = parsed.sourceIds
           dbg(`splitting XHR creation request into ${ids.length} single-source request(s)`, ids)
           emit("nblmqol-split-start", { sourceIds: ids })
@@ -300,6 +327,11 @@ type ParsedRequest = { sourceIds: string[]; outer: unknown[] }
             void (async () => {
               let succeeded = 1 // the original XHR below carries the first source
               for (let i = 1; i < ids.length; i++) {
+                if (splitAborted) {
+                  dbg(`fan-out aborted by user after ${i}/${ids.length} request(s)`)
+                  emit("nblmqol-split-done", { succeeded: Math.max(succeeded, 0), total: ids.length, sourceIds: ids, aborted: true })
+                  return
+                }
                 await sleep(1500)
                 try {
                   const r = await origFetch.call(window, url, {

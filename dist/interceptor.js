@@ -9,13 +9,13 @@
       2: "Report",
       3: "Video Overview",
       4: "Flashcards",
-      5: "Quiz",
+      // v1.3: quiz & flashcards SHARE code 4 - subtype detected below
       7: "Infographic",
       8: "Slide Deck",
       9: "Data Table",
       10: "Mind Map"
     };
-    const DEBUG = true;
+    const DEBUG = false;
     const dbg = (...args) => {
       if (DEBUG) console.info("[nblm-qol][net]", ...args);
     };
@@ -27,6 +27,11 @@
       dbg(splitArmed ? "split mode ARMED" : "split mode disarmed");
     });
     const splitActive = () => splitArmed && Date.now() - armedAt < 10 * 60 * 1e3;
+    let splitAborted = false;
+    window.addEventListener("nblmqol-split-abort", () => {
+      splitAborted = true;
+      dbg("split abort requested");
+    });
     const emit = (name, detail) => {
       window.dispatchEvent(new CustomEvent(name, { detail }));
     };
@@ -65,6 +70,15 @@
             for (const a of data[0]) {
               if (!Array.isArray(a) || a.length < 5 || typeof a[0] !== "string") continue;
               const typeCode = a[2];
+              let typeLabel = TYPE_BY_CODE[typeCode] ?? `type ${typeCode}`;
+              try {
+                if (typeCode === 4 && Array.isArray(a[9]) && Array.isArray(a[9][1])) {
+                  const sub = a[9][1][0];
+                  if (sub === 2) typeLabel = "Quiz";
+                  else if (sub === 1) typeLabel = "Flashcards";
+                }
+              } catch {
+              }
               let downloadUrl = null;
               try {
                 if (typeCode === 1 && Array.isArray(a[6]) && typeof a[6][3] === "string") downloadUrl = a[6][3];
@@ -82,7 +96,7 @@
               artifacts.push({
                 id: a[0],
                 title: typeof a[1] === "string" ? a[1] : "",
-                type: TYPE_BY_CODE[typeCode] ?? `type ${typeCode}`,
+                type: typeLabel,
                 status: a[4] === 1 ? "in_progress" : a[4] === 3 ? "completed" : `status ${a[4]}`,
                 sourceIds: flattenIds(a[3]),
                 downloadUrl
@@ -150,6 +164,7 @@
         if (parsed) {
           dbg(`splitting fetch creation request into ${parsed.sourceIds.length} single-source request(s)`, parsed.sourceIds);
           splitArmed = false;
+          splitAborted = false;
           const ids = parsed.sourceIds;
           emit("nblmqol-split-start", { sourceIds: ids });
           const firstBody = ids.length > 1 ? buildBodyFor(bodyText, parsed, ids[0]) : bodyText;
@@ -161,6 +176,11 @@
             } catch {
             }
             for (let i = 1; i < ids.length; i++) {
+              if (splitAborted) {
+                dbg(`fan-out aborted by user after ${i}/${ids.length} request(s)`);
+                emit("nblmqol-split-done", { succeeded, total: ids.length, sourceIds: ids, aborted: true });
+                return;
+              }
               await sleep(1500);
               try {
                 const r = await origFetch.call(window, input, Object.assign({}, init, { body: buildBodyFor(bodyText, parsed, ids[i]) }));
@@ -209,6 +229,7 @@
           const parsed = parseStudioRequest(body);
           if (parsed) {
             splitArmed = false;
+            splitAborted = false;
             const ids = parsed.sourceIds;
             dbg(`splitting XHR creation request into ${ids.length} single-source request(s)`, ids);
             emit("nblmqol-split-start", { sourceIds: ids });
@@ -217,6 +238,11 @@
               void (async () => {
                 let succeeded = 1;
                 for (let i = 1; i < ids.length; i++) {
+                  if (splitAborted) {
+                    dbg(`fan-out aborted by user after ${i}/${ids.length} request(s)`);
+                    emit("nblmqol-split-done", { succeeded: Math.max(succeeded, 0), total: ids.length, sourceIds: ids, aborted: true });
+                    return;
+                  }
                   await sleep(1500);
                   try {
                     const r = await origFetch.call(window, url, {

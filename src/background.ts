@@ -39,6 +39,31 @@ chrome.runtime.onMessage.addListener((msg: any, _sender: any, sendResponse: (r?:
       expected[expected.length - 1].at = Date.now()
     }
     sendResponse?.({ ok: true })
+  } else if (msg?.type === "directDownload") {
+    // v1.3: network-based bulk download. The content script found a direct
+    // file URL inside NotebookLM's own poll responses; chrome.downloads
+    // fetches it instantly (no menu clicks needed on the page). Reuse the
+    // expectDownload rename machinery via onDeterminingFilename so the file
+    // lands as "NotebookLM/<output name>.<original extension>".
+    const name = sanitize(String(msg.name ?? ""))
+    expected.push({ name, at: Date.now() })
+    try {
+      chrome.downloads.download({ url: String(msg.url ?? "") }, (downloadId?: number) => {
+        if (chrome.runtime.lastError || downloadId === undefined) {
+          // Remove the queued expectation so it can't rename an unrelated download.
+          const idx = expected.findIndex((x) => x.name === name)
+          if (idx !== -1) expected.splice(idx, 1)
+          sendResponse?.({ ok: false, error: chrome.runtime.lastError?.message ?? "download failed" })
+        } else {
+          sendResponse?.({ ok: true })
+        }
+      })
+      return true // keep the message channel open for the async response
+    } catch (e) {
+      const idx = expected.findIndex((x) => x.name === name)
+      if (idx !== -1) expected.splice(idx, 1)
+      sendResponse?.({ ok: false, error: (e as Error).message })
+    }
   }
   return false
 })

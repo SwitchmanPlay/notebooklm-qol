@@ -22,6 +22,25 @@
         expected[expected.length - 1].at = Date.now();
       }
       sendResponse?.({ ok: true });
+    } else if (msg?.type === "directDownload") {
+      const name = sanitize(String(msg.name ?? ""));
+      expected.push({ name, at: Date.now() });
+      try {
+        chrome.downloads.download({ url: String(msg.url ?? "") }, (downloadId) => {
+          if (chrome.runtime.lastError || downloadId === void 0) {
+            const idx = expected.findIndex((x) => x.name === name);
+            if (idx !== -1) expected.splice(idx, 1);
+            sendResponse?.({ ok: false, error: chrome.runtime.lastError?.message ?? "download failed" });
+          } else {
+            sendResponse?.({ ok: true });
+          }
+        });
+        return true;
+      } catch (e) {
+        const idx = expected.findIndex((x) => x.name === name);
+        if (idx !== -1) expected.splice(idx, 1);
+        sendResponse?.({ ok: false, error: e.message });
+      }
     }
     return false;
   });

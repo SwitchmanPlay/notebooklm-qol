@@ -19,12 +19,47 @@ import * as registry from "./registry.ts"
 // own dialog). `toast` is a hoisted function declaration, so this is safe.
 window.addEventListener("nblmqol-split-start", (e: Event) => {
   const k = (((e as CustomEvent).detail?.sourceIds ?? []) as string[]).length
-  if (k > 1) toast(`\u26a1 Splitting your request into ${k} per-source generations\u2026`)
+  if (k > 1) {
+    toast(`\u26a1 Splitting your request into ${k} per-source generations\u2026`)
+    showNetBatchPanel(k)
+  }
 })
 window.addEventListener("nblmqol-split-done", (e: Event) => {
-  const d = ((e as CustomEvent).detail ?? {}) as { succeeded?: number; total?: number }
-  if ((d.total ?? 0) > 1) toast(`\u26a1 Started ${d.succeeded}/${d.total} generations. Renames apply automatically as items finish.`)
+  const d = ((e as CustomEvent).detail ?? {}) as { succeeded?: number; total?: number; aborted?: boolean }
+  removeNetBatchPanel()
+  if (d.aborted)
+    toast(
+      `Batch cancelled \u2014 ${d.succeeded ?? 0}/${d.total ?? 0} request(s) had already been sent (those keep generating and still get renamed).`,
+    )
+  else if ((d.total ?? 0) > 1) toast(`\u26a1 Started ${d.succeeded}/${d.total} generations. Renames apply automatically as items finish.`)
 })
+
+// v1.3: while the fan-out is running (requests go out ~1.5s apart) show a
+// small bottom-right panel with a Cancel button - previously there was no way
+// to stop a batch once Generate was pressed.
+function showNetBatchPanel(total: number): void {
+  removeNetBatchPanel()
+  const panel = el("div", "", "")
+  panel.id = "nblmqol-netbatch"
+  panel.append(
+    el("span", "", `\u26a1 Batch: sending ${total} generation requests\u2026`),
+    btn(
+      "Cancel remaining",
+      () => {
+        window.dispatchEvent(new CustomEvent("nblmqol-split-abort"))
+        removeNetBatchPanel()
+      },
+      "nblmqol-danger",
+    ),
+  )
+  document.body.appendChild(panel)
+  // Safety net: the send window is short - never leave the panel up forever.
+  window.setTimeout(removeNetBatchPanel, 3 * 60 * 1000)
+}
+
+function removeNetBatchPanel(): void {
+  document.getElementById("nblmqol-netbatch")?.remove()
+}
 
 // v1.2.1: timestamp of the most recent split start, tracked at module scope.
 // The dialog-cancel watchdog previously attached its own one-shot listener,
@@ -292,6 +327,30 @@ async function bulkDownload(): Promise<void> {
   for (const id of ids) {
     i++
     const a = adapter.findArtifact(id)
+    // v1.3: network-first download. NotebookLM's own poll responses carry a
+    // direct file URL for audio / video / infographic / slide deck outputs -
+    // downloading that URL via chrome.downloads is instant (no menu clicks)
+    // and keeps working while rows re-render.
+    const reg = registry.get(id)
+    if (reg?.downloadUrl && reg.status === "completed") {
+      const name = a?.title || reg.title || "NotebookLM output"
+      const resp = await new Promise<{ ok?: boolean; error?: string } | undefined>((resolve) => {
+        try {
+          chrome.runtime.sendMessage({ type: "directDownload", url: reg.downloadUrl, name }, (r: any) => {
+            void chrome.runtime.lastError // swallow "context invalidated" style errors
+            resolve(r)
+          })
+        } catch {
+          resolve(undefined)
+        }
+      })
+      if (resp?.ok) {
+        ok++
+        if (i < ids.length) await sleep(500) // the fast path needs no menu-dance breathing room
+        continue
+      }
+      // Direct download failed - fall through to the click path below.
+    }
     if (!a) {
       failed++
       toast("A selected output is not in the list right now (still generating?) - skipped")
@@ -587,7 +646,7 @@ async function openBatchModal(): Promise<void> {
       try {
         console.info(`[nblm-qol][batch] network batch: type="${select.value}" sources=${chosen.length}`, chosen.map((c) => c.title))
         await adapter.applySourceSelection(new Set(chosen.map((c) => c.id)))
-        if (renameBox.checked) registry.armAutoRename(notebookId, settings.template)
+        if (renameBox.checked) registry.armAutoRename(notebookId, settings.template, select.value)
         else registry.disarmAutoRename()
         const armedAt = Date.now()
         window.dispatchEvent(new CustomEvent("nblmqol-mode", { detail: { split: true } }))
@@ -660,11 +719,22 @@ export function renderQueuePanel(batch: BatchState): void {
     el("strong", "", title),
     el("span", "nblmqol-count", `${s.done}/${s.total} started${s.failed ? `, ${s.failed} failed` : ""}`),
   )
+  // v1.3: collapse the panel off-screen to the right; a small edge tab brings it back.
+  const collapseB = btn(
+    "\u00bb",
+    () => {
+      queueCollapsed = true
+      applyQueueCollapsed()
+    },
+    "nblmqol-ghost",
+  )
+  collapseB.title = "Hide panel (a small tab stays on the right edge)"
   const closeB = btn("\u2715", async () => {
     panel!.remove()
+    document.getElementById("nblmqol-queue-tab")?.remove()
     if (finished || stopped) await batchRunner.clearBatch(batch.notebookId)
   }, "nblmqol-ghost")
-  head.appendChild(closeB)
+  head.append(collapseB, closeB)
   panel.appendChild(head)
 
   const list = el("div", "nblmqol-queue-list", "")
@@ -697,6 +767,30 @@ export function renderQueuePanel(batch: BatchState): void {
         }
       }),
     )
+  }
+  applyQueueCollapsed()
+}
+
+// v1.3: the queue panel can be swiped away to the right; a small edge tab
+// reopens it. The flag lives at module scope so re-renders while the batch
+// keeps running preserve the collapsed state.
+let queueCollapsed = false
+
+function applyQueueCollapsed(): void {
+  const panel = $("#nblmqol-queue")
+  if (!panel) return
+  panel.classList.toggle("nblmqol-queue-collapsed", queueCollapsed)
+  let tab = document.getElementById("nblmqol-queue-tab")
+  if (queueCollapsed && !tab) {
+    tab = el("button", "", "\u00ab Batch")
+    tab.id = "nblmqol-queue-tab"
+    tab.onclick = () => {
+      queueCollapsed = false
+      applyQueueCollapsed()
+    }
+    document.body.appendChild(tab)
+  } else if (!queueCollapsed) {
+    tab?.remove()
   }
 }
 

@@ -993,11 +993,14 @@
   }
 
   // src/content/registry.ts
-  var DEBUG = true;
+  var DEBUG = false;
   var dbg = (...args) => {
     if (DEBUG) console.info("[nblm-qol][registry]", ...args);
   };
   var artifacts = /* @__PURE__ */ new Map();
+  function get(id) {
+    return artifacts.get(id) ?? null;
+  }
   function size() {
     return artifacts.size;
   }
@@ -1010,10 +1013,11 @@
     return names.length > 0 ? names : null;
   }
   var expectation = null;
-  function armAutoRename(notebookId, template) {
+  function armAutoRename(notebookId, template, typeLabel) {
     expectation = {
       notebookId,
       template,
+      typeLabel: typeLabel ?? null,
       priorIds: /* @__PURE__ */ new Set([...artifacts.keys(), ...artifactIds()]),
       expectedSourceIds: null,
       renamed: /* @__PURE__ */ new Set(),
@@ -1044,7 +1048,7 @@
       expectation.n++;
       const name = applyTemplate(expectation.template, {
         source: names[0],
-        type: a.type,
+        type: expectation.typeLabel ?? a.type,
         date: /* @__PURE__ */ new Date(),
         n: expectation.n
       });
@@ -1074,12 +1078,41 @@
   // src/content/ui.ts
   window.addEventListener("nblmqol-split-start", (e) => {
     const k = (e.detail?.sourceIds ?? []).length;
-    if (k > 1) toast(`\u26A1 Splitting your request into ${k} per-source generations\u2026`);
+    if (k > 1) {
+      toast(`\u26A1 Splitting your request into ${k} per-source generations\u2026`);
+      showNetBatchPanel(k);
+    }
   });
   window.addEventListener("nblmqol-split-done", (e) => {
     const d = e.detail ?? {};
-    if ((d.total ?? 0) > 1) toast(`\u26A1 Started ${d.succeeded}/${d.total} generations. Renames apply automatically as items finish.`);
+    removeNetBatchPanel();
+    if (d.aborted)
+      toast(
+        `Batch cancelled \u2014 ${d.succeeded ?? 0}/${d.total ?? 0} request(s) had already been sent (those keep generating and still get renamed).`
+      );
+    else if ((d.total ?? 0) > 1) toast(`\u26A1 Started ${d.succeeded}/${d.total} generations. Renames apply automatically as items finish.`);
   });
+  function showNetBatchPanel(total) {
+    removeNetBatchPanel();
+    const panel = el("div", "", "");
+    panel.id = "nblmqol-netbatch";
+    panel.append(
+      el("span", "", `\u26A1 Batch: sending ${total} generation requests\u2026`),
+      btn(
+        "Cancel remaining",
+        () => {
+          window.dispatchEvent(new CustomEvent("nblmqol-split-abort"));
+          removeNetBatchPanel();
+        },
+        "nblmqol-danger"
+      )
+    );
+    document.body.appendChild(panel);
+    window.setTimeout(removeNetBatchPanel, 3 * 60 * 1e3);
+  }
+  function removeNetBatchPanel() {
+    document.getElementById("nblmqol-netbatch")?.remove();
+  }
   var lastSplitStartAt = 0;
   window.addEventListener("nblmqol-split-start", () => {
     lastSplitStartAt = Date.now();
@@ -1287,6 +1320,25 @@
     for (const id of ids) {
       i++;
       const a = findArtifact(id);
+      const reg = get(id);
+      if (reg?.downloadUrl && reg.status === "completed") {
+        const name = a?.title || reg.title || "NotebookLM output";
+        const resp = await new Promise((resolve) => {
+          try {
+            chrome.runtime.sendMessage({ type: "directDownload", url: reg.downloadUrl, name }, (r) => {
+              void chrome.runtime.lastError;
+              resolve(r);
+            });
+          } catch {
+            resolve(void 0);
+          }
+        });
+        if (resp?.ok) {
+          ok++;
+          if (i < ids.length) await sleep(500);
+          continue;
+        }
+      }
       if (!a) {
         failed++;
         toast("A selected output is not in the list right now (still generating?) - skipped");
@@ -1534,7 +1586,7 @@ ${names}`)) return;
         try {
           console.info(`[nblm-qol][batch] network batch: type="${select.value}" sources=${chosen.length}`, chosen.map((c) => c.title));
           await applySourceSelection(new Set(chosen.map((c) => c.id)));
-          if (renameBox.checked) armAutoRename(notebookId, settings.template);
+          if (renameBox.checked) armAutoRename(notebookId, settings.template, select.value);
           else disarmAutoRename();
           const armedAt = Date.now();
           window.dispatchEvent(new CustomEvent("nblmqol-mode", { detail: { split: true } }));
@@ -1587,11 +1639,21 @@ ${names}`)) return;
       el("strong", "", title),
       el("span", "nblmqol-count", `${s.done}/${s.total} started${s.failed ? `, ${s.failed} failed` : ""}`)
     );
+    const collapseB = btn(
+      "\xBB",
+      () => {
+        queueCollapsed = true;
+        applyQueueCollapsed();
+      },
+      "nblmqol-ghost"
+    );
+    collapseB.title = "Hide panel (a small tab stays on the right edge)";
     const closeB = btn("\u2715", async () => {
       panel.remove();
+      document.getElementById("nblmqol-queue-tab")?.remove();
       if (finished || stopped) await clearBatch(batch.notebookId);
     }, "nblmqol-ghost");
-    head.appendChild(closeB);
+    head.append(collapseB, closeB);
     panel.appendChild(head);
     const list = el("div", "nblmqol-queue-list", "");
     for (const j of batch.jobs) {
@@ -1621,6 +1683,25 @@ ${names}`)) return;
           }
         })
       );
+    }
+    applyQueueCollapsed();
+  }
+  var queueCollapsed = false;
+  function applyQueueCollapsed() {
+    const panel = $("#nblmqol-queue");
+    if (!panel) return;
+    panel.classList.toggle("nblmqol-queue-collapsed", queueCollapsed);
+    let tab = document.getElementById("nblmqol-queue-tab");
+    if (queueCollapsed && !tab) {
+      tab = el("button", "", "\xAB Batch");
+      tab.id = "nblmqol-queue-tab";
+      tab.onclick = () => {
+        queueCollapsed = false;
+        applyQueueCollapsed();
+      };
+      document.body.appendChild(tab);
+    } else if (!queueCollapsed) {
+      tab?.remove();
     }
   }
   async function offerResumeIfNeeded() {
@@ -1738,7 +1819,7 @@ ${names.join("\n")}`)) return;
 
   // src/content/index.ts
   async function main() {
-    console.info("[nblm-qol] NotebookLM QoL v1.2.1-test active (debug logging ON) \u2014 all extension log lines start with [nblm-qol]");
+    console.info("[nblm-qol] NotebookLM QoL v1.3.0 active");
     init();
     const settings2 = await loadSettings();
     await initUi(settings2);

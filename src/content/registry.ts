@@ -22,8 +22,8 @@ export type RegistryArtifact = {
   downloadUrl: string | null
 }
 
-// v1.2 TEST BUILD: verbose logging. Filter the console by [nblm-qol].
-const DEBUG = true
+// Set to true for a verbose debug build. Filter the console by [nblm-qol].
+const DEBUG = false
 const dbg = (...args: unknown[]): void => {
   if (DEBUG) console.info("[nblm-qol][registry]", ...args)
 }
@@ -53,6 +53,12 @@ export function sourceNamesFor(artifactId: string): string[] | null {
 type Expectation = {
   notebookId: string
   template: string
+  /**
+   * The type label the user picked in the batch modal (e.g. "Quiz").
+   * Quiz & flashcards share NotebookLM type code 4, so the network-derived
+   * label alone can't always tell them apart - the user's pick wins.
+   */
+  typeLabel: string | null
   /** Artifacts that existed BEFORE the split - never rename those. */
   priorIds: Set<string>
   /** Set once the interceptor reports which sources were split. */
@@ -65,10 +71,11 @@ type Expectation = {
 let expectation: Expectation | null = null
 
 /** Arm auto-renaming for artifacts created by the upcoming split. */
-export function armAutoRename(notebookId: string, template: string): void {
+export function armAutoRename(notebookId: string, template: string, typeLabel?: string): void {
   expectation = {
     notebookId,
     template,
+    typeLabel: typeLabel ?? null,
     priorIds: new Set<string>([...artifacts.keys(), ...adapter.artifactIds()]),
     expectedSourceIds: null,
     renamed: new Set(),
@@ -101,7 +108,7 @@ function processExpectation(): void {
     expectation.n++
     const name = applyTemplate(expectation.template, {
       source: names[0],
-      type: a.type,
+      type: expectation.typeLabel ?? a.type,
       date: new Date(),
       n: expectation.n,
     })
