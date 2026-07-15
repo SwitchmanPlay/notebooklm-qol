@@ -385,3 +385,9 @@ html.nblmqol-hide-overlays .cdk-overlay-container {
   opacity: 0.45;
   pointer-events: none;
 }
+
+/* v1.2.1: room for the floating bulk bar - without this the last output row
+   sits underneath the bar and cannot be seen or selected. */
+.nblmqol-padscroll {
+  padding-bottom: 150px !important;
+}

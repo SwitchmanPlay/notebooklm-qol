@@ -1080,6 +1080,10 @@
     const d = e.detail ?? {};
     if ((d.total ?? 0) > 1) toast(`\u26A1 Started ${d.succeeded}/${d.total} generations. Renames apply automatically as items finish.`);
   });
+  var lastSplitStartAt = 0;
+  window.addEventListener("nblmqol-split-start", () => {
+    lastSplitStartAt = Date.now();
+  });
   var settings;
   async function initUi(s) {
     settings = s;
@@ -1138,6 +1142,7 @@
     let bar = $("#nblmqol-bulkbar");
     if (total === 0) {
       bar?.remove();
+      for (const p of $$(".nblmqol-padscroll")) p.classList.remove("nblmqol-padscroll");
       return;
     }
     if (!bar) {
@@ -1155,6 +1160,26 @@
       document.body.appendChild(bar);
     }
     updateBulkBar();
+    padStudioList();
+  }
+  function padStudioList() {
+    const bar = $("#nblmqol-bulkbar");
+    const item = $(SEL.artifactItem);
+    let target = null;
+    if (bar && item) {
+      let n = item.parentElement;
+      while (n && n !== document.body) {
+        const cs = getComputedStyle(n);
+        if (cs.overflowY === "auto" || cs.overflowY === "scroll") {
+          target = n;
+          break;
+        }
+        n = n.parentElement;
+      }
+      if (!target) target = item.parentElement;
+    }
+    for (const p of $$(".nblmqol-padscroll")) if (p !== target) p.classList.remove("nblmqol-padscroll");
+    target?.classList.add("nblmqol-padscroll");
   }
   function updateBulkBar() {
     const sel = selectedArtifacts.size;
@@ -1511,13 +1536,14 @@ ${names}`)) return;
           await applySourceSelection(new Set(chosen.map((c) => c.id)));
           if (renameBox.checked) armAutoRename(notebookId, settings.template);
           else disarmAutoRename();
+          const armedAt = Date.now();
           window.dispatchEvent(new CustomEvent("nblmqol-mode", { detail: { split: true } }));
           const res = await openOptionsDialog(select.value);
           if (res.opened) {
             toast(
               `Set the options, language and custom prompt for ${select.value}, then press Generate ONCE \u2014 it runs once per source (${chosen.length}). Closing the dialog cancels.`
             );
-            watchDialogForCancel(res.dialog);
+            watchDialogForCancel(res.dialog, armedAt);
           } else {
             toast(`${select.value} has no options dialog \u2014 splitting into ${chosen.length} per-source generations\u2026`);
           }
@@ -1531,18 +1557,12 @@ ${names}`)) return;
     card.appendChild(actions);
     document.body.appendChild(overlay);
   }
-  function watchDialogForCancel(dlg) {
-    let fired = false;
-    const onStart = () => {
-      fired = true;
-    };
-    window.addEventListener("nblmqol-split-start", onStart, { once: true });
+  function watchDialogForCancel(dlg, armedAt) {
     const watch = setInterval(() => {
       if (document.contains(dlg)) return;
       clearInterval(watch);
       setTimeout(() => {
-        window.removeEventListener("nblmqol-split-start", onStart);
-        if (fired) return;
+        if (lastSplitStartAt >= armedAt) return;
         console.info("[nblm-qol][batch] dialog closed without generating - batch cancelled");
         window.dispatchEvent(new CustomEvent("nblmqol-mode", { detail: { split: false } }));
         disarmAutoRename();
@@ -1718,7 +1738,7 @@ ${names.join("\n")}`)) return;
 
   // src/content/index.ts
   async function main() {
-    console.info("[nblm-qol] NotebookLM QoL v1.2.0-test active (debug logging ON) \u2014 all extension log lines start with [nblm-qol]");
+    console.info("[nblm-qol] NotebookLM QoL v1.2.1-test active (debug logging ON) \u2014 all extension log lines start with [nblm-qol]");
     init();
     const settings2 = await loadSettings();
     await initUi(settings2);

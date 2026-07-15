@@ -26,6 +26,16 @@ window.addEventListener("nblmqol-split-done", (e: Event) => {
   if ((d.total ?? 0) > 1) toast(`\u26a1 Started ${d.succeeded}/${d.total} generations. Renames apply automatically as items finish.`)
 })
 
+// v1.2.1: timestamp of the most recent split start, tracked at module scope.
+// The dialog-cancel watchdog previously attached its own one-shot listener,
+// which MISSED splits that started before it was attached (fast Generate
+// presses, dialog-less types) and falsely cancelled running batches mid
+// fan-out - disarming auto-rename and leaving the remaining items unnamed.
+let lastSplitStartAt = 0
+window.addEventListener("nblmqol-split-start", () => {
+  lastSplitStartAt = Date.now()
+})
+
 let settings: Settings
 
 export async function initUi(s: Settings): Promise<void> {
@@ -105,6 +115,7 @@ function ensureBulkBar(): void {
   let bar = $("#nblmqol-bulkbar")
   if (total === 0) {
     bar?.remove()
+    for (const p of $$(".nblmqol-padscroll")) p.classList.remove("nblmqol-padscroll")
     return
   }
   if (!bar) {
@@ -125,6 +136,34 @@ function ensureBulkBar(): void {
     document.body.appendChild(bar)
   }
   updateBulkBar()
+  padStudioList()
+}
+
+/**
+ * v1.2.1: the floating bulk bar covered the last output rows, so the bottom
+ * item was invisible/unselectable. Give the Studio scroll container extra
+ * bottom padding whenever the bar is visible, so the last items can scroll
+ * up above the bar. Idempotent: re-applied on every observer tick because
+ * Angular re-renders the container.
+ */
+function padStudioList(): void {
+  const bar = $("#nblmqol-bulkbar")
+  const item = $(SEL.artifactItem)
+  let target: HTMLElement | null = null
+  if (bar && item) {
+    let n: HTMLElement | null = item.parentElement
+    while (n && n !== document.body) {
+      const cs = getComputedStyle(n)
+      if (cs.overflowY === "auto" || cs.overflowY === "scroll") {
+        target = n
+        break
+      }
+      n = n.parentElement
+    }
+    if (!target) target = item.parentElement
+  }
+  for (const p of $$(".nblmqol-padscroll")) if (p !== target) p.classList.remove("nblmqol-padscroll")
+  target?.classList.add("nblmqol-padscroll")
 }
 
 /** Update the bulk bar AND the top header in place - never replaces nodes. */
@@ -550,13 +589,14 @@ async function openBatchModal(): Promise<void> {
         await adapter.applySourceSelection(new Set(chosen.map((c) => c.id)))
         if (renameBox.checked) registry.armAutoRename(notebookId, settings.template)
         else registry.disarmAutoRename()
+        const armedAt = Date.now()
         window.dispatchEvent(new CustomEvent("nblmqol-mode", { detail: { split: true } }))
         const res = await adapter.openOptionsDialog(select.value)
         if (res.opened) {
           toast(
             `Set the options, language and custom prompt for ${select.value}, then press Generate ONCE \u2014 it runs once per source (${chosen.length}). Closing the dialog cancels.`,
           )
-          watchDialogForCancel(res.dialog!)
+          watchDialogForCancel(res.dialog!, armedAt)
         } else {
           toast(`${select.value} has no options dialog \u2014 splitting into ${chosen.length} per-source generations\u2026`)
         }
@@ -578,18 +618,15 @@ async function openBatchModal(): Promise<void> {
  * generation. A short grace period covers the normal case where the creation
  * request fires just as the dialog closes.
  */
-function watchDialogForCancel(dlg: HTMLElement): void {
-  let fired = false
-  const onStart = (): void => {
-    fired = true
-  }
-  window.addEventListener("nblmqol-split-start", onStart, { once: true })
+function watchDialogForCancel(dlg: HTMLElement, armedAt: number): void {
   const watch = setInterval(() => {
     if (document.contains(dlg)) return // still open
     clearInterval(watch)
     setTimeout(() => {
-      window.removeEventListener("nblmqol-split-start", onStart)
-      if (fired) return
+      // v1.2.1: compare against the module-scope timestamp instead of a
+      // per-watch listener - a split that started at ANY point after arming
+      // (even before this watchdog was attached) means the batch is running.
+      if (lastSplitStartAt >= armedAt) return
       console.info("[nblm-qol][batch] dialog closed without generating - batch cancelled")
       window.dispatchEvent(new CustomEvent("nblmqol-mode", { detail: { split: false } }))
       registry.disarmAutoRename()
