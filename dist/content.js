@@ -1819,7 +1819,7 @@ ${names.join("\n")}`)) return;
 
   // src/content/index.ts
   async function main() {
-    console.info("[nblm-qol] NotebookLM QoL v1.3.0 active");
+    console.info("[nblm-qol] NotebookLM QoL v1.3.1 active");
     init();
     const settings2 = await loadSettings();
     await initUi(settings2);
