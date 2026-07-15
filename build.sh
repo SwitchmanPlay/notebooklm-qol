@@ -7,6 +7,8 @@ BIN=${ESBUILD:-esbuild}
 mkdir -p dist
 
 "$BIN" src/content/index.ts --bundle --format=iife --target=chrome120 --outfile=dist/content.js --log-level=warning
+"$BIN" src/content/inject.ts --bundle --format=iife --target=chrome120 --outfile=dist/inject.js --log-level=warning
+"$BIN" src/content/interceptor.ts --bundle --format=iife --target=chrome120 --outfile=dist/interceptor.js --log-level=warning
 "$BIN" src/background.ts    --bundle --format=iife --target=chrome120 --outfile=dist/background.js --log-level=warning
 "$BIN" src/popup.ts         --bundle --format=iife --target=chrome120 --outfile=dist/popup.js --log-level=warning
 cp src/content/content.css dist/content.css

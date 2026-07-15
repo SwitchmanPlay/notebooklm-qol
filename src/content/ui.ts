@@ -12,6 +12,19 @@ import { findDuplicateGroups } from "../lib/dedupe.ts"
 import { BatchState, summary } from "../lib/queue.ts"
 import { KEYS, Settings, getLocal, setLocal } from "../lib/settings.ts"
 import * as batchRunner from "./batch.ts"
+import * as registry from "./registry.ts"
+
+// v1.1: user feedback for split mode (armed via the batch modal, executed by
+// the MAIN-world interceptor when the user presses Generate in NotebookLM's
+// own dialog). `toast` is a hoisted function declaration, so this is safe.
+window.addEventListener("nblmqol-split-start", (e: Event) => {
+  const k = (((e as CustomEvent).detail?.sourceIds ?? []) as string[]).length
+  if (k > 1) toast(`\u26a1 Splitting your request into ${k} per-source generations\u2026`)
+})
+window.addEventListener("nblmqol-split-done", (e: Event) => {
+  const d = ((e as CustomEvent).detail ?? {}) as { succeeded?: number; total?: number }
+  if ((d.total ?? 0) > 1) toast(`\u26a1 Started ${d.succeeded}/${d.total} generations. Renames apply automatically as items finish.`)
+})
 
 let settings: Settings
 
@@ -102,10 +115,9 @@ function ensureBulkBar(): void {
     const actions = el("span", "nblmqol-bulkactions", "")
     actions.append(
       btn("Download", () => bulkDownload()),
-      // v1.0: bulk "Rename by template" for EXISTING outputs is disabled - the
-      // "View prompt & sources" dialog proved too unreliable to read. Flip
-      // ENABLE_BULK_RENAME to true to work on it again (see README).
-      ...(ENABLE_BULK_RENAME ? [btn("Rename by template", () => bulkRename(), "nblmqol-teal")] : []),
+      // v1.1: renaming by source works again - source ids now come from the
+      // network registry instead of the flaky "View prompt & sources" dialog.
+      ...(ENABLE_BULK_RENAME ? [btn("Rename by source", () => bulkRename(), "nblmqol-teal")] : []),
       btn("Delete", () => bulkDelete(), "nblmqol-danger"),
       btn("\u2715", () => clearSelection(), "nblmqol-ghost"),
     )
@@ -277,67 +289,78 @@ async function bulkDownload(): Promise<void> {
   toast(bits.join(", "))
 }
 
-// v1.0: feature flag, intentionally OFF. Renaming EXISTING outputs relied on
-// reading the "View prompt & sources" dialog, which proved too unreliable in
-// real notebooks. Batch generation still auto-renames NEW outputs, which works.
-// Kept (not deleted) so a future fix only needs to flip this flag.
-const ENABLE_BULK_RENAME = false
+// v1.1: back ON. Renaming EXISTING outputs no longer opens any dialog - the
+// MAIN-world interceptor reads each output's source ids straight from
+// NotebookLM's own network responses (see interceptor.ts / registry.ts).
+const ENABLE_BULK_RENAME = true
 
 async function bulkRename(): Promise<void> {
   const all = adapter.listArtifacts().filter((a) => a.id && selectedArtifacts.has(a.id))
-  // Still-generating outputs have no menu and no sources yet - skip them
-  // up front instead of timing out on each one (reselect them once done).
+  // Still-generating outputs can't be renamed yet - skip them up front
+  // (reselect them once they finish).
   const items = all.filter((a) => !/^generating\b/i.test(a.title))
   const skippedGen = all.length - items.length
   if (items.length === 0) {
     toast("All selected outputs are still generating \u2014 try again when they finish.")
     return
   }
+  // v1.1: source names come from the network registry (registry.ts) - no
+  // dialogs are opened anymore. The interceptor loads at document_start, so if
+  // nothing was captured yet a reload fixes it.
+  if (registry.size() === 0) {
+    toast("No source data captured yet \u2014 reload the page, let the outputs list load, then try again.")
+    return
+  }
   // Guard against accidental "rename all 37 outputs" clicks.
   if (
     items.length > 3 &&
     !window.confirm(
-      `Rename ${items.length} outputs using the template \u201c${settings.template}\u201d?\n\nThis reads each output's sources first (a few seconds per item). Queued renames keep applying even after a reload \u2014 you can cancel them from the header above the outputs list.`,
+      `Rename ${items.length} outputs to their source names using the template \u201c${settings.template}\u201d?\n\nQueued renames keep applying even after a reload \u2014 you can cancel them from the header above the outputs list.`,
     )
   )
     return
   const notebookId = adapter.currentNotebookId()
-  // v0.7: keep NotebookLM's dialogs invisible for the whole run and make sure
-  // nothing is left open from before - a stuck dialog broke every rename.
-  adapter.setOverlaysHidden(true)
-  await adapter.forceCloseDialogs()
+  // v1.2: let the Studio list settle before touching it - renaming while rows
+  // re-render was the main source of missed/odd renames.
+  await adapter.waitForStableArtifacts().catch(() => undefined)
   let n = 0
   let ok = 0
   let queued = 0
   let fromTitle = 0
   for (const a of items) {
     n++
-    toast(`Renaming ${n}/${items.length}: reading sources of \u201c${a.title}\u201d\u2026`)
-    // Resolve the real source name(s) via "View prompt and sources" - this is
-    // what makes renaming OLD outputs (created before the extension) work.
     let sourceName = a.title
-    const srcs = await adapter.getArtifactSources(a.id!)
+    const srcs = registry.sourceNamesFor(a.id!)
     if (srcs && srcs.length > 0) sourceName = srcs.length === 1 ? srcs[0] : `${srcs[0]} +${srcs.length - 1}`
     else fromTitle++ // be honest in the summary instead of silently using the title
     const name = applyTemplate(settings.template, { source: sourceName, type: a.type, date: new Date(), n })
+    console.info(`[nblm-qol][rename] ${n}/${items.length} id=${a.id} "${a.title}" sources=${JSON.stringify(srcs)} -> "${name}"`)
     try {
       await adapter.renameArtifact(a.id!, name)
       ok++
-      await sleep(400)
-    } catch {
-      // Still generating or the rename didn't stick - queue it; the background
-      // loop retries every ~25s and survives page reloads.
-      if (notebookId) {
-        await batchRunner.queueRename(notebookId, a.id!, name)
-        queued++
+      await sleep(600)
+    } catch (e1) {
+      // v1.2: one immediate retry after letting the list settle - a mid-rename
+      // re-render was the main cause of "selected three, renamed one".
+      console.warn(`[nblm-qol][rename] attempt 1 failed for "${name}": ${(e1 as Error).message} - retrying once`)
+      await sleep(1200)
+      try {
+        await adapter.renameArtifact(a.id!, name)
+        ok++
+        await sleep(600)
+      } catch (e2) {
+        console.warn(`[nblm-qol][rename] attempt 2 failed for "${name}": ${(e2 as Error).message} - queueing`)
+        // Queue it; the background loop retries every ~25s, survives reloads.
+        if (notebookId) {
+          await batchRunner.queueRename(notebookId, a.id!, name)
+          queued++
+        }
       }
     }
   }
-  await adapter.forceCloseDialogs()
-  adapter.setOverlaysHidden(false)
   const bits = [`Renamed ${ok}/${items.length}`]
   if (queued > 0) bits.push(`${queued} queued (applies automatically when ready)`)
-  if (fromTitle > 0) bits.push(`${fromTitle} used the current title (sources unreadable)`)
+  if (fromTitle > 0) bits.push(`${fromTitle} kept their current title (source not in the registry)`)
   if (skippedGen > 0) bits.push(`${skippedGen} still generating \u2014 skipped`)
   toast(bits.join(", "))
   clearSelection()
@@ -415,13 +438,14 @@ async function openBatchModal(): Promise<void> {
   typeRow.appendChild(select)
   card.appendChild(typeRow)
 
-  // Format options are chosen ONCE, in NotebookLM's own dialog, when the
-  // first job starts - then applied automatically to every remaining job.
+  // v1.2: everything is configured ONCE in NotebookLM's own dialog - format,
+  // language, custom prompt. The single Generate press is then split into one
+  // request per source at the network level.
   card.appendChild(
     el(
       "p",
       "nblmqol-hint",
-      "If this type has options (e.g. Deep Dive/Brief, Explainer/Short), NotebookLM's own dialog will open for the FIRST item \u2014 pick what you want and press Generate. Your picks are applied to the rest of the batch automatically.",
+      "After Start batch, NotebookLM's own options dialog opens ONCE. Everything you set there \u2014 format, language, custom prompt (focus, topic, slide deck description\u2026) \u2014 applies to EVERY item: your single Generate press is split into one generation per source.",
     ),
   )
 
@@ -462,11 +486,20 @@ async function openBatchModal(): Promise<void> {
   renameRow.append(renameBox, el("span", "", `Rename results using template (\u201c${settings.template}\u201d)`))
   card.appendChild(renameRow)
 
+  // v1.2: the old click-driven engine stays available as a fallback while the
+  // network engine is being field-tested.
+  const legacyRow = el("label", "nblmqol-row nblmqol-toggle", "")
+  const legacyBox = document.createElement("input")
+  legacyBox.type = "checkbox"
+  legacyBox.checked = false
+  legacyRow.append(legacyBox, el("span", "", "Legacy mode (old click engine \u2014 only if the new mode fails; no language/custom prompt support)"))
+  card.appendChild(legacyRow)
+
   card.appendChild(
     el(
       "p",
       "nblmqol-hint",
-      "Jobs start one at a time; generation continues in NotebookLM's own queue. Keep this tab open while jobs are being started. You can stop a running batch from the queue panel.",
+      "Requests are sent ~1.5s apart; generation continues in NotebookLM's own queue. Closing the options dialog without pressing Generate cancels the batch.",
     ),
   )
 
@@ -489,22 +522,80 @@ async function openBatchModal(): Promise<void> {
       }
       await setLocal(KEYS.renamePref, renameBox.checked)
       await setLocal(KEYS.lastType, select.value)
+      const legacy = legacyBox.checked
       overlay.remove()
+
+      if (legacy) {
+        // Old v1.0 engine: click-driven, replays recorded Format picks per job.
+        try {
+          await batchRunner.startNewBatch({
+            notebookId,
+            artifactType: select.value,
+            sources: chosen,
+            renameToSource: renameBox.checked,
+            events: { onUpdate: renderQueuePanel, onNotice: toast },
+          })
+        } catch (e) {
+          toast((e as Error).message)
+        }
+        return
+      }
+
+      // v1.2 unified network batch: check the chosen sources, arm the split,
+      // then open NotebookLM's own dialog ONCE. Format, language and custom
+      // prompt all ride along in the real request, so they apply to every
+      // per-source generation.
       try {
-        await batchRunner.startNewBatch({
-          notebookId,
-          artifactType: select.value,
-          sources: chosen,
-          renameToSource: renameBox.checked,
-          events: { onUpdate: renderQueuePanel, onNotice: toast },
-        })
+        console.info(`[nblm-qol][batch] network batch: type="${select.value}" sources=${chosen.length}`, chosen.map((c) => c.title))
+        await adapter.applySourceSelection(new Set(chosen.map((c) => c.id)))
+        if (renameBox.checked) registry.armAutoRename(notebookId, settings.template)
+        else registry.disarmAutoRename()
+        window.dispatchEvent(new CustomEvent("nblmqol-mode", { detail: { split: true } }))
+        const res = await adapter.openOptionsDialog(select.value)
+        if (res.opened) {
+          toast(
+            `Set the options, language and custom prompt for ${select.value}, then press Generate ONCE \u2014 it runs once per source (${chosen.length}). Closing the dialog cancels.`,
+          )
+          watchDialogForCancel(res.dialog!)
+        } else {
+          toast(`${select.value} has no options dialog \u2014 splitting into ${chosen.length} per-source generations\u2026`)
+        }
       } catch (e) {
+        // Disarm everything - never leave a stray split waiting.
+        window.dispatchEvent(new CustomEvent("nblmqol-mode", { detail: { split: false } }))
+        registry.disarmAutoRename()
         toast((e as Error).message)
       }
     }),
   )
   card.appendChild(actions)
   document.body.appendChild(overlay)
+}
+
+/**
+ * v1.2: if the user closes NotebookLM's options dialog WITHOUT pressing
+ * Generate, disarm the split so it can never hijack a later, unrelated
+ * generation. A short grace period covers the normal case where the creation
+ * request fires just as the dialog closes.
+ */
+function watchDialogForCancel(dlg: HTMLElement): void {
+  let fired = false
+  const onStart = (): void => {
+    fired = true
+  }
+  window.addEventListener("nblmqol-split-start", onStart, { once: true })
+  const watch = setInterval(() => {
+    if (document.contains(dlg)) return // still open
+    clearInterval(watch)
+    setTimeout(() => {
+      window.removeEventListener("nblmqol-split-start", onStart)
+      if (fired) return
+      console.info("[nblm-qol][batch] dialog closed without generating - batch cancelled")
+      window.dispatchEvent(new CustomEvent("nblmqol-mode", { detail: { split: false } }))
+      registry.disarmAutoRename()
+      toast("Batch cancelled \u2014 the dialog was closed without generating.")
+    }, 2000)
+  }, 500)
 }
 
 // ================= Queue panel =================

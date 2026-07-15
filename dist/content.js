@@ -39,8 +39,19 @@
       sourceBulk: true
     }
   };
+  function contextAlive() {
+    try {
+      return !!chrome.runtime?.id;
+    } catch {
+      return false;
+    }
+  }
   async function loadSettings() {
-    const raw = await chrome.storage.sync.get("settings");
+    let raw;
+    try {
+      if (contextAlive()) raw = await chrome.storage.sync.get("settings");
+    } catch {
+    }
     const s = raw?.settings ?? {};
     return {
       template: typeof s.template === "string" && s.template.trim() ? s.template : DEFAULT_SETTINGS.template,
@@ -53,11 +64,20 @@
     });
   }
   async function getLocal(key, fallback) {
-    const raw = await chrome.storage.local.get(key);
-    return raw?.[key] ?? fallback;
+    if (!contextAlive()) return fallback;
+    try {
+      const raw = await chrome.storage.local.get(key);
+      return raw?.[key] ?? fallback;
+    } catch {
+      return fallback;
+    }
   }
   async function setLocal(key, value) {
-    await chrome.storage.local.set({ [key]: value });
+    if (!contextAlive()) return;
+    try {
+      await chrome.storage.local.set({ [key]: value });
+    } catch {
+    }
   }
   var KEYS = {
     batch: (notebookId) => `nblmqol.batch.${notebookId}`,
@@ -312,7 +332,10 @@
       await closeMenus();
       throw new Error(`Rename not available yet for "${a.title}" (probably still generating)`);
     }
-    const input = await waitFor(() => $(SEL.artifactTitleInput, a.el), {
+    const input = await waitFor(() => {
+      const now = findArtifact(id);
+      return now ? $(SEL.artifactTitleInput, now.el) : null;
+    }, {
       timeoutMs: 5e3,
       what: "inline rename input"
     });
@@ -438,6 +461,36 @@
     }
     return { id, recordedChoices: recorded };
   }
+  async function openOptionsDialog(typeLabel) {
+    const opt = listCreateOptions().find((o) => o.label.toLowerCase() === typeLabel.toLowerCase());
+    if (!opt) throw new Error(`Create button not found for type: ${typeLabel}`);
+    const customize = findCustomizeButton(typeLabel);
+    const openDialogWith = async (trigger, timeoutMs) => {
+      const dialogsBefore = new Set($$(SEL.dialogContainer));
+      realClick(trigger);
+      try {
+        return await waitFor(
+          () => $$(SEL.dialogContainer).find((d) => !dialogsBefore.has(d) && isVisible(d)) ?? null,
+          { timeoutMs, what: "options dialog" }
+        );
+      } catch {
+        return null;
+      }
+    };
+    let dlg = null;
+    if (customize) {
+      dlg = await openDialogWith(customize, 5e3);
+      if (!dlg) {
+        console.warn(`[nblm-qol] ${typeLabel}: Customize button opened no dialog - using the plain create button`);
+        dlg = await openDialogWith(opt.el, 3e3);
+      }
+    } else {
+      dlg = await openDialogWith(opt.el, 3e3);
+    }
+    if (dlg) await waitForDialogControls(dlg).catch(() => void 0);
+    else console.info(`[nblm-qol] ${typeLabel}: no options dialog - generation starts immediately with defaults`);
+    return { opened: !!dlg, dialog: dlg };
+  }
   function findCustomizeButton(typeLabel) {
     const want = typeLabel.trim().toLowerCase();
     return $$(SEL.customizeButton).find((b) => {
@@ -519,104 +572,6 @@
       });
       await sleep(300);
     } catch {
-    }
-  }
-  var overlayHideCount = 0;
-  function hideOverlays(on) {
-    overlayHideCount = Math.max(0, overlayHideCount + (on ? 1 : -1));
-    document.documentElement.classList.toggle("nblmqol-hide-overlays", overlayHideCount > 0);
-  }
-  function setOverlaysHidden(on) {
-    hideOverlays(on);
-  }
-  async function forceCloseDialogs() {
-    for (let attempt = 0; attempt < 4; attempt++) {
-      const open = $$("mat-dialog-container").filter(isVisible);
-      if (open.length === 0) return true;
-      for (const dlg of open) {
-        const close = $(SEL.dialogCloseButton, dlg);
-        if (close) realClick(close);
-      }
-      await sleep(400);
-      if (!$$("mat-dialog-container").some(isVisible)) return true;
-      pressEscapeCompat();
-      await sleep(400);
-      $(".cdk-overlay-backdrop")?.click();
-      await sleep(300);
-    }
-    const stuck = $$("mat-dialog-container").some(isVisible);
-    if (stuck) console.warn("[nblm-qol] a NotebookLM dialog refused to close");
-    return !stuck;
-  }
-  async function closeDialog(dlg) {
-    const gone = () => !document.contains(dlg) || !isVisible(dlg) ? true : null;
-    if (gone()) return;
-    try {
-      const close = await waitFor(() => $(SEL.dialogCloseButton, dlg), { timeoutMs: 2500, what: "dialog close button" });
-      realClick(close);
-      await waitFor(gone, { timeoutMs: 2500, what: "dialog to close" });
-      return;
-    } catch {
-    }
-    pressEscapeCompat(dlg);
-    try {
-      await waitFor(gone, { timeoutMs: 1500, what: "dialog to close" });
-      return;
-    } catch {
-    }
-    $(".cdk-overlay-backdrop")?.click();
-    try {
-      await waitFor(gone, { timeoutMs: 1500, what: "dialog to close" });
-    } catch {
-      console.warn("[nblm-qol] could not close a NotebookLM dialog");
-    }
-  }
-  async function getArtifactSources(id) {
-    const a = findArtifact(id);
-    if (!a) return null;
-    if (/^generating\b/i.test(a.title)) return null;
-    hideOverlays(true);
-    try {
-      await forceCloseDialogs();
-      let dlg = null;
-      for (let attempt = 0; attempt < 2 && !dlg; attempt++) {
-        if (!await forceCloseDialogs()) throw new Error("a stuck dialog would not close");
-        await sleep(300);
-        const menu = await openArtifactMenu(a);
-        const clicked = await clickMenuItemOptional(menu, LABELS.artifactViewSources);
-        if (!clicked) {
-          await closeMenus();
-          return null;
-        }
-        try {
-          dlg = await waitFor(() => $$(SEL.attributionDialog).find(isVisible) ?? null, {
-            timeoutMs: attempt === 0 ? 12e3 : 2e4,
-            what: "prompt & sources dialog"
-          });
-        } catch (e) {
-          if (attempt === 1) throw e;
-          await closeMenus();
-        }
-      }
-      if (!dlg) return null;
-      const dialog = dlg;
-      try {
-        await waitFor(() => $$(SEL.attributionSourceTitle, dialog).length > 0 ? true : null, {
-          timeoutMs: 4e3,
-          what: "source chips"
-        });
-      } catch {
-      }
-      const titles = $$(SEL.attributionSourceTitle, dialog).map(textOf).filter(Boolean);
-      await closeDialog(dialog);
-      console.info("[nblm-qol] artifact sources:", titles);
-      return titles;
-    } catch (e) {
-      console.warn("[nblm-qol] could not read an artifact's sources:", e instanceof Error ? e.message : e);
-      return null;
-    } finally {
-      await forceCloseDialogs();
-      hideOverlays(false);
     }
   }
   function detectRateLimit() {
@@ -1037,7 +992,94 @@
     return all.filter((r) => r.notebookId === notebookId).length;
   }
 
+  // src/content/registry.ts
+  var DEBUG = true;
+  var dbg = (...args) => {
+    if (DEBUG) console.info("[nblm-qol][registry]", ...args);
+  };
+  var artifacts = /* @__PURE__ */ new Map();
+  function size() {
+    return artifacts.size;
+  }
+  function sourceNamesFor(artifactId) {
+    const a = artifacts.get(artifactId);
+    if (!a || a.sourceIds.length === 0) return null;
+    const byId = /* @__PURE__ */ new Map();
+    for (const s of listSources()) if (s.id && s.title) byId.set(s.id, s.title);
+    const names = a.sourceIds.map((id) => byId.get(id)).filter((x) => !!x);
+    return names.length > 0 ? names : null;
+  }
+  var expectation = null;
+  function armAutoRename(notebookId, template) {
+    expectation = {
+      notebookId,
+      template,
+      priorIds: /* @__PURE__ */ new Set([...artifacts.keys(), ...artifactIds()]),
+      expectedSourceIds: null,
+      renamed: /* @__PURE__ */ new Set(),
+      n: 0,
+      expiresAt: Date.now() + 30 * 60 * 1e3
+    };
+    dbg(`auto-rename armed (${expectation.priorIds.size} pre-existing artifacts excluded)`);
+  }
+  function disarmAutoRename() {
+    expectation = null;
+  }
+  function processExpectation() {
+    if (!expectation) return;
+    if (Date.now() > expectation.expiresAt) {
+      expectation = null;
+      return;
+    }
+    for (const a of artifacts.values()) {
+      if (expectation.priorIds.has(a.id) || expectation.renamed.has(a.id)) continue;
+      if (a.sourceIds.length !== 1) continue;
+      if (expectation.expectedSourceIds && !expectation.expectedSourceIds.has(a.sourceIds[0])) continue;
+      const names = sourceNamesFor(a.id);
+      if (!names) {
+        dbg(`auto-rename: artifact ${a.id.slice(0, 8)} source id not resolvable in Sources panel yet - will retry`);
+        continue;
+      }
+      expectation.renamed.add(a.id);
+      expectation.n++;
+      const name = applyTemplate(expectation.template, {
+        source: names[0],
+        type: a.type,
+        date: /* @__PURE__ */ new Date(),
+        n: expectation.n
+      });
+      dbg(`auto-rename: ${a.id.slice(0, 8)} "${a.title}" -> "${name}"`);
+      void queueRename(expectation.notebookId, a.id, name);
+    }
+  }
+  function init() {
+    window.addEventListener("nblmqol-artifacts", (e) => {
+      const detail = e.detail;
+      let added = 0;
+      for (const a of detail?.artifacts ?? []) {
+        if (a && typeof a.id === "string" && a.id) {
+          artifacts.set(a.id, a);
+          added++;
+        }
+      }
+      dbg(`update: ${added} artifact(s) received, total known: ${artifacts.size}`);
+      processExpectation();
+    });
+    window.addEventListener("nblmqol-split-start", (e) => {
+      const ids = (e.detail?.sourceIds ?? []).filter((x) => typeof x === "string");
+      if (expectation && ids.length > 0) expectation.expectedSourceIds = new Set(ids);
+    });
+  }
+
   // src/content/ui.ts
+  window.addEventListener("nblmqol-split-start", (e) => {
+    const k = (e.detail?.sourceIds ?? []).length;
+    if (k > 1) toast(`\u26A1 Splitting your request into ${k} per-source generations\u2026`);
+  });
+  window.addEventListener("nblmqol-split-done", (e) => {
+    const d = e.detail ?? {};
+    if ((d.total ?? 0) > 1) toast(`\u26A1 Started ${d.succeeded}/${d.total} generations. Renames apply automatically as items finish.`);
+  });
   var settings;
   async function initUi(s) {
     settings = s;
@@ -1105,7 +1147,7 @@
       const actions = el("span", "nblmqol-bulkactions", "");
       actions.append(
         btn("Download", () => bulkDownload()),
-        ...ENABLE_BULK_RENAME ? [btn("Rename by template", () => bulkRename(), "nblmqol-teal")] : [],
+        ...ENABLE_BULK_RENAME ? [btn("Rename by source", () => bulkRename(), "nblmqol-teal")] : [],
         btn("Delete", () => bulkDelete(), "nblmqol-danger"),
         btn("\u2715", () => clearSelection(), "nblmqol-ghost")
       );
@@ -1252,7 +1294,7 @@
     if (failed) bits.push(`${failed} failed`);
     toast(bits.join(", "));
   }
-  var ENABLE_BULK_RENAME = false;
+  var ENABLE_BULK_RENAME = true;
   async function bulkRename() {
     const all = listArtifacts().filter((a) => a.id && selectedArtifacts.has(a.id));
     const items = all.filter((a) => !/^generating\b/i.test(a.title));
@@ -1261,43 +1303,53 @@
       toast("All selected outputs are still generating \u2014 try again when they finish.");
       return;
     }
+    if (size() === 0) {
+      toast("No source data captured yet \u2014 reload the page, let the outputs list load, then try again.");
+      return;
+    }
     if (items.length > 3 && !window.confirm(
-      `Rename ${items.length} outputs using the template \u201C${settings.template}\u201D?
+      `Rename ${items.length} outputs to their source names using the template \u201C${settings.template}\u201D?
 
-This reads each output's sources first (a few seconds per item). Queued renames keep applying even after a reload \u2014 you can cancel them from the header above the outputs list.`
+Queued renames keep applying even after a reload \u2014 you can cancel them from the header above the outputs list.`
     ))
       return;
     const notebookId = currentNotebookId();
-    setOverlaysHidden(true);
-    await forceCloseDialogs();
+    await waitForStableArtifacts().catch(() => void 0);
     let n = 0;
     let ok = 0;
     let queued = 0;
     let fromTitle = 0;
     for (const a of items) {
       n++;
-      toast(`Renaming ${n}/${items.length}: reading sources of \u201C${a.title}\u201D\u2026`);
       let sourceName = a.title;
-      const srcs = await getArtifactSources(a.id);
+      const srcs = sourceNamesFor(a.id);
       if (srcs && srcs.length > 0) sourceName = srcs.length === 1 ? srcs[0] : `${srcs[0]} +${srcs.length - 1}`;
       else fromTitle++;
       const name = applyTemplate(settings.template, { source: sourceName, type: a.type, date: /* @__PURE__ */ new Date(), n });
+      console.info(`[nblm-qol][rename] ${n}/${items.length} id=${a.id} "${a.title}" sources=${JSON.stringify(srcs)} -> "${name}"`);
       try {
         await renameArtifact(a.id, name);
         ok++;
-        await sleep(400);
-      } catch {
-        if (notebookId) {
-          await queueRename(notebookId, a.id, name);
-          queued++;
+        await sleep(600);
+      } catch (e1) {
+        console.warn(`[nblm-qol][rename] attempt 1 failed for "${name}": ${e1.message} - retrying once`);
+        await sleep(1200);
+        try {
+          await renameArtifact(a.id, name);
+          ok++;
+          await sleep(600);
+        } catch (e2) {
+          console.warn(`[nblm-qol][rename] attempt 2 failed for "${name}": ${e2.message} - queueing`);
+          if (notebookId) {
+            await queueRename(notebookId, a.id, name);
+            queued++;
+          }
         }
       }
     }
-    await forceCloseDialogs();
-    setOverlaysHidden(false);
     const bits = [`Renamed ${ok}/${items.length}`];
     if (queued > 0) bits.push(`${queued} queued (applies automatically when ready)`);
-    if (fromTitle > 0) bits.push(`${fromTitle} used the current title (sources unreadable)`);
+    if (fromTitle > 0) bits.push(`${fromTitle} kept their current title (source not in the registry)`);
     if (skippedGen > 0) bits.push(`${skippedGen} still generating \u2014 skipped`);
     toast(bits.join(", "));
     clearSelection();
@@ -1370,7 +1422,7 @@ ${names}`)) return;
       el(
         "p",
         "nblmqol-hint",
-        "If this type has options (e.g. Deep Dive/Brief, Explainer/Short), NotebookLM's own dialog will open for the FIRST item \u2014 pick what you want and press Generate. Your picks are applied to the rest of the batch automatically."
+        "After Start batch, NotebookLM's own options dialog opens ONCE. Everything you set there \u2014 format, language, custom prompt (focus, topic, slide deck description\u2026) \u2014 applies to EVERY item: your single Generate press is split into one generation per source."
       )
     );
     const nativeChecked = sources.filter((s) => s.checked);
@@ -1406,11 +1458,17 @@ ${names}`)) return;
     renameBox.checked = renamePref;
     renameRow.append(renameBox, el("span", "", `Rename results using template (\u201C${settings.template}\u201D)`));
     card.appendChild(renameRow);
+    const legacyRow = el("label", "nblmqol-row nblmqol-toggle", "");
+    const legacyBox = document.createElement("input");
+    legacyBox.type = "checkbox";
+    legacyBox.checked = false;
+    legacyRow.append(legacyBox, el("span", "", "Legacy mode (old click engine \u2014 only if the new mode fails; no language/custom prompt support)"));
+    card.appendChild(legacyRow);
     card.appendChild(
       el(
         "p",
         "nblmqol-hint",
-        "Jobs start one at a time; generation continues in NotebookLM's own queue. Keep this tab open while jobs are being started. You can stop a running batch from the queue panel."
+        "Requests are sent ~1.5s apart; generation continues in NotebookLM's own queue. Closing the options dialog without pressing Generate cancels the batch."
       )
     );
     const actions = el("div", "nblmqol-actions", "");
@@ -1432,22 +1490,65 @@ ${names}`)) return;
         }
         await setLocal(KEYS.renamePref, renameBox.checked);
         await setLocal(KEYS.lastType, select.value);
+        const legacy = legacyBox.checked;
         overlay.remove();
+        if (legacy) {
+          try {
+            await startNewBatch({
+              notebookId,
+              artifactType: select.value,
+              sources: chosen,
+              renameToSource: renameBox.checked,
+              events: { onUpdate: renderQueuePanel, onNotice: toast }
+            });
+          } catch (e) {
+            toast(e.message);
+          }
+          return;
+        }
         try {
-          await startNewBatch({
-            notebookId,
-            artifactType: select.value,
-            sources: chosen,
-            renameToSource: renameBox.checked,
-            events: { onUpdate: renderQueuePanel, onNotice: toast }
-          });
+          console.info(`[nblm-qol][batch] network batch: type="${select.value}" sources=${chosen.length}`, chosen.map((c) => c.title));
+          await applySourceSelection(new Set(chosen.map((c) => c.id)));
+          if (renameBox.checked) armAutoRename(notebookId, settings.template);
+          else disarmAutoRename();
+          window.dispatchEvent(new CustomEvent("nblmqol-mode", { detail: { split: true } }));
+          const res = await openOptionsDialog(select.value);
+          if (res.opened) {
+            toast(
+              `Set the options, language and custom prompt for ${select.value}, then press Generate ONCE \u2014 it runs once per source (${chosen.length}). Closing the dialog cancels.`
+            );
+            watchDialogForCancel(res.dialog);
+          } else {
+            toast(`${select.value} has no options dialog \u2014 splitting into ${chosen.length} per-source generations\u2026`);
+          }
         } catch (e) {
+          window.dispatchEvent(new CustomEvent("nblmqol-mode", { detail: { split: false } }));
+          disarmAutoRename();
           toast(e.message);
         }
       })
     );
     card.appendChild(actions);
     document.body.appendChild(overlay);
+  }
+  function watchDialogForCancel(dlg) {
+    let fired = false;
+    const onStart = () => {
+      fired = true;
+    };
+    window.addEventListener("nblmqol-split-start", onStart, { once: true });
+    const watch = setInterval(() => {
+      if (document.contains(dlg)) return;
+      clearInterval(watch);
+      setTimeout(() => {
+        window.removeEventListener("nblmqol-split-start", onStart);
+        if (fired) return;
+        console.info("[nblm-qol][batch] dialog closed without generating - batch cancelled");
+        window.dispatchEvent(new CustomEvent("nblmqol-mode", { detail: { split: false } }));
+        disarmAutoRename();
+        toast("Batch cancelled \u2014 the dialog was closed without generating.");
+      }, 2e3);
+    }, 500);
   }
   function renderQueuePanel(batch) {
     let panel = $("#nblmqol-queue");
@@ -1617,7 +1718,8 @@ ${names.join("\n")}`)) return;
 
   // src/content/index.ts
   async function main() {
-    console.info("[nblm-qol] NotebookLM QoL v0.5.0 active \u2014 all extension log lines start with [nblm-qol]");
+    console.info("[nblm-qol] NotebookLM QoL v1.2.0-test active (debug logging ON) \u2014 all extension log lines start with [nblm-qol]");
+    init();
     const settings2 = await loadSettings();
     await initUi(settings2);
     onSettingsChanged((s) => updateSettings(s));

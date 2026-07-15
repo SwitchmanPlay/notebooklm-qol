@@ -47,8 +47,19 @@
       sourceBulk: true
     }
   };
+  function contextAlive() {
+    try {
+      return !!chrome.runtime?.id;
+    } catch {
+      return false;
+    }
+  }
   async function loadSettings() {
-    const raw = await chrome.storage.sync.get("settings");
+    let raw;
+    try {
+      if (contextAlive()) raw = await chrome.storage.sync.get("settings");
+    } catch {
+    }
     const s = raw?.settings ?? {};
     return {
       template: typeof s.template === "string" && s.template.trim() ? s.template : DEFAULT_SETTINGS.template,

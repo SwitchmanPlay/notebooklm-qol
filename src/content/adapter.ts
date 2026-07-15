@@ -143,7 +143,13 @@ export async function renameArtifact(id: string, newName: string): Promise<void>
     await closeMenus()
     throw new Error(`Rename not available yet for "${a.title}" (probably still generating)`)
   }
-  const input = (await waitFor(() => $(SEL.artifactTitleInput, a.el), {
+  // v1.2: re-find the row fresh on every tick - `a.el` can be a stale,
+  // detached node if the list re-rendered right after the menu click. This
+  // silently broke renames ("selected three, only one got renamed").
+  const input = (await waitFor(() => {
+    const now = findArtifact(id)
+    return now ? $(SEL.artifactTitleInput, now.el) : null
+  }, {
     timeoutMs: 5000,
     what: "inline rename input",
   })) as HTMLInputElement
@@ -309,6 +315,49 @@ export async function generateArtifactInteractive(
     id = await waitForNewArtifact(before, typeLabel)
   }
   return { id, recordedChoices: recorded }
+}
+
+/**
+ * v1.2 (unified network batch): open NotebookLM's own options dialog for a
+ * type and hand it ENTIRELY to the user - nothing is recorded or replayed.
+ * The armed network interceptor splits the user's single Generate press into
+ * one request per checked source, so format, language and custom prompts all
+ * apply to every item.
+ *
+ * Returns whether a dialog opened, plus the dialog element so the caller can
+ * watch for "closed without generating". For dialog-less types the plain
+ * create button starts generation immediately (the interceptor must already
+ * be armed BEFORE calling this).
+ */
+export async function openOptionsDialog(typeLabel: string): Promise<{ opened: boolean; dialog: HTMLElement | null }> {
+  const opt = listCreateOptions().find((o) => o.label.toLowerCase() === typeLabel.toLowerCase())
+  if (!opt) throw new Error(`Create button not found for type: ${typeLabel}`)
+  const customize = findCustomizeButton(typeLabel)
+  const openDialogWith = async (trigger: HTMLElement, timeoutMs: number): Promise<HTMLElement | null> => {
+    const dialogsBefore = new Set($$(SEL.dialogContainer))
+    realClick(trigger)
+    try {
+      return await waitFor(
+        () => $$(SEL.dialogContainer).find((d) => !dialogsBefore.has(d) && isVisible(d)) ?? null,
+        { timeoutMs, what: "options dialog" },
+      )
+    } catch {
+      return null
+    }
+  }
+  let dlg: HTMLElement | null = null
+  if (customize) {
+    dlg = await openDialogWith(customize, 5000)
+    if (!dlg) {
+      console.warn(`[nblm-qol] ${typeLabel}: Customize button opened no dialog - using the plain create button`)
+      dlg = await openDialogWith(opt.el, 3000)
+    }
+  } else {
+    dlg = await openDialogWith(opt.el, 3000)
+  }
+  if (dlg) await waitForDialogControls(dlg).catch(() => undefined)
+  else console.info(`[nblm-qol] ${typeLabel}: no options dialog - generation starts immediately with defaults`)
+  return { opened: !!dlg, dialog: dlg }
 }
 
 /** The "Customize <type>" pencil next to a create tile (not every type has one). */

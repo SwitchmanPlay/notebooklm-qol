@@ -19,8 +19,27 @@ export const DEFAULT_SETTINGS: Settings = {
   },
 }
 
+/**
+ * v1.2: when the extension is reloaded/updated while a NotebookLM tab is
+ * open, the old content script keeps running but every chrome.* call throws
+ * "Extension context invalidated". Those errors were spamming the console -
+ * all storage helpers now fail soft (defaults / no-op) instead.
+ */
+function contextAlive(): boolean {
+  try {
+    return !!chrome.runtime?.id
+  } catch {
+    return false
+  }
+}
+
 export async function loadSettings(): Promise<Settings> {
-  const raw = await chrome.storage.sync.get("settings")
+  let raw: { settings?: Partial<Settings> } | undefined
+  try {
+    if (contextAlive()) raw = await chrome.storage.sync.get("settings")
+  } catch {
+    /* orphaned content script - use defaults */
+  }
   const s = (raw?.settings ?? {}) as Partial<Settings>
   return {
     template: typeof s.template === "string" && s.template.trim() ? s.template : DEFAULT_SETTINGS.template,
@@ -48,12 +67,22 @@ export type PendingRename = {
 }
 
 export async function getLocal<T>(key: string, fallback: T): Promise<T> {
-  const raw = await chrome.storage.local.get(key)
-  return (raw?.[key] as T) ?? fallback
+  if (!contextAlive()) return fallback
+  try {
+    const raw = await chrome.storage.local.get(key)
+    return (raw?.[key] as T) ?? fallback
+  } catch {
+    return fallback // orphaned content script (extension reloaded under us)
+  }
 }
 
 export async function setLocal<T>(key: string, value: T): Promise<void> {
-  await chrome.storage.local.set({ [key]: value })
+  if (!contextAlive()) return
+  try {
+    await chrome.storage.local.set({ [key]: value })
+  } catch {
+    /* orphaned content script - drop the write instead of throwing */
+  }
 }
 
 export const KEYS = {
