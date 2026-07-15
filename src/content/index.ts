@@ -11,7 +11,7 @@ import * as batch from "./batch.ts"
 import * as registry from "./registry.ts"
 
 async function main(): Promise<void> {
-  console.info("[nblm-qol] NotebookLM QoL v1.4.0 active")
+  console.info("[nblm-qol] NotebookLM QoL v1.5.0 active")
   // v1.1: start collecting artifact/source data from the MAIN-world
   // interceptor as early as possible (the interceptor itself is injected at
   // document_start by inject.ts).

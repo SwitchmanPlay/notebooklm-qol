@@ -37,6 +37,44 @@ window.addEventListener("nblmqol-split-done", (e: Event) => {
 // v1.3: while the fan-out is running (requests go out ~1.5s apart) show a
 // small bottom-right panel with a Cancel button - previously there was no way
 // to stop a batch once Generate was pressed.
+// v1.5: generic bottom progress indicator for bulk downloads / renames.
+// One panel, centered at the bottom so it never collides with the queue panel.
+function showProgress(label: string, done: number, total: number): void {
+  let panel = document.getElementById("nblmqol-progress")
+  if (!panel) {
+    panel = el("div", "", "")
+    panel.id = "nblmqol-progress"
+    const text = el("span", "nblmqol-progress-text", "")
+    const track = el("div", "nblmqol-progress-track", "")
+    track.appendChild(el("div", "nblmqol-progress-fill", ""))
+    panel.append(text, track)
+    document.body.appendChild(panel)
+  }
+  const text = panel.querySelector(".nblmqol-progress-text")
+  if (text) text.textContent = `${label} ${done}/${total}\u2026`
+  const fill = panel.querySelector(".nblmqol-progress-fill") as HTMLElement | null
+  if (fill) fill.style.width = total > 0 ? `${Math.round((done / total) * 100)}%` : "0%"
+}
+
+function removeProgress(delayMs = 0): void {
+  const kill = () => document.getElementById("nblmqol-progress")?.remove()
+  if (delayMs > 0) window.setTimeout(kill, delayMs)
+  else kill()
+}
+
+// v1.5: background auto-renames (batch.ts retry loop) report progress here so
+// post-batch renames are visible instead of "quietly weird".
+window.addEventListener("nblmqol-rename-progress", (e: Event) => {
+  const d = ((e as CustomEvent).detail ?? {}) as { applied?: number; total?: number; done?: boolean }
+  if (d.done) {
+    removeProgress(1200)
+    return
+  }
+  if (typeof d.applied === "number" && d.applied > 0) {
+    showProgress("Auto-renaming", d.applied, d.total ?? d.applied)
+  }
+})
+
 function showNetBatchPanel(total: number): void {
   removeNetBatchPanel()
   const panel = el("div", "", "")
@@ -326,6 +364,7 @@ async function bulkDownload(): Promise<void> {
   )
   for (const id of ids) {
     i++
+    showProgress("Downloading", i - 1, ids.length)
     const a = adapter.findArtifact(id)
     // v1.3: network-first download. NotebookLM's own poll responses carry a
     // direct file URL for audio / video / infographic / slide deck outputs -
@@ -381,6 +420,8 @@ async function bulkDownload(): Promise<void> {
     // download plenty of room before the next menu dance.
     if (i < ids.length) await sleep(6000)
   }
+  showProgress("Downloading", ids.length, ids.length)
+  removeProgress(1500)
   const bits = [`Triggered ${ok}/${ids.length} download(s)`]
   if (skipped) bits.push(`${skipped} skipped (no download option)`)
   if (failed) bits.push(`${failed} failed`)
@@ -427,6 +468,7 @@ async function bulkRename(): Promise<void> {
   let fromTitle = 0
   for (const a of items) {
     n++
+    showProgress("Renaming", n - 1, items.length)
     let sourceName = a.title
     const srcs = registry.sourceNamesFor(a.id!)
     if (srcs && srcs.length > 0) sourceName = srcs.length === 1 ? srcs[0] : `${srcs[0]} +${srcs.length - 1}`
@@ -456,6 +498,8 @@ async function bulkRename(): Promise<void> {
       }
     }
   }
+  showProgress("Renaming", items.length, items.length)
+  removeProgress(1500)
   const bits = [`Renamed ${ok}/${items.length}`]
   if (queued > 0) bits.push(`${queued} queued (applies automatically when ready)`)
   if (fromTitle > 0) bits.push(`${fromTitle} kept their current title (source not in the registry)`)

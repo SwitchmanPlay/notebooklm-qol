@@ -977,6 +977,8 @@
       const dayAgo = Date.now() - 24 * 3600 * 1e3;
       const keep = [];
       let changed = false;
+      const mineTotal = all.filter((r) => r.notebookId === notebookId && r.createdAt >= dayAgo).length;
+      let appliedNow = 0;
       for (const r of all) {
         if (r.createdAt < dayAgo) {
           changed = true;
@@ -1002,11 +1004,14 @@
         try {
           await renameArtifact(r.artifactId, r.name);
           changed = true;
+          appliedNow++;
+          window.dispatchEvent(new CustomEvent("nblmqol-rename-progress", { detail: { applied: appliedNow, total: mineTotal } }));
           await sleep(400);
         } catch {
           keep.push(r);
         }
       }
+      if (appliedNow > 0) window.dispatchEvent(new CustomEvent("nblmqol-rename-progress", { detail: { done: true } }));
       if (changed || keep.length !== all.length) await setLocal(KEYS.renames, keep);
     } finally {
       applyingRenames = false;
@@ -1116,6 +1121,37 @@
         `Batch cancelled \u2014 ${d.succeeded ?? 0}/${d.total ?? 0} request(s) had already been sent (those keep generating and still get renamed).`
       );
     else if ((d.total ?? 0) > 1) toast(`\u26A1 Started ${d.succeeded}/${d.total} generations. Renames apply automatically as items finish.`);
+  });
+  function showProgress(label, done, total) {
+    let panel = document.getElementById("nblmqol-progress");
+    if (!panel) {
+      panel = el("div", "", "");
+      panel.id = "nblmqol-progress";
+      const text2 = el("span", "nblmqol-progress-text", "");
+      const track = el("div", "nblmqol-progress-track", "");
+      track.appendChild(el("div", "nblmqol-progress-fill", ""));
+      panel.append(text2, track);
+      document.body.appendChild(panel);
+    }
+    const text = panel.querySelector(".nblmqol-progress-text");
+    if (text) text.textContent = `${label} ${done}/${total}\u2026`;
+    const fill = panel.querySelector(".nblmqol-progress-fill");
+    if (fill) fill.style.width = total > 0 ? `${Math.round(done / total * 100)}%` : "0%";
+  }
+  function removeProgress(delayMs = 0) {
+    const kill = () => document.getElementById("nblmqol-progress")?.remove();
+    if (delayMs > 0) window.setTimeout(kill, delayMs);
+    else kill();
+  }
+  window.addEventListener("nblmqol-rename-progress", (e) => {
+    const d = e.detail ?? {};
+    if (d.done) {
+      removeProgress(1200);
+      return;
+    }
+    if (typeof d.applied === "number" && d.applied > 0) {
+      showProgress("Auto-renaming", d.applied, d.total ?? d.applied);
+    }
   });
   function showNetBatchPanel(total) {
     removeNetBatchPanel();
@@ -1344,6 +1380,7 @@
     );
     for (const id of ids) {
       i++;
+      showProgress("Downloading", i - 1, ids.length);
       const a = findArtifact(id);
       const reg = get(id);
       if (reg?.downloadUrl && reg.status === "completed") {
@@ -1391,6 +1428,8 @@
       }
       if (i < ids.length) await sleep(6e3);
     }
+    showProgress("Downloading", ids.length, ids.length);
+    removeProgress(1500);
     const bits = [`Triggered ${ok}/${ids.length} download(s)`];
     if (skipped) bits.push(`${skipped} skipped (no download option)`);
     if (failed) bits.push(`${failed} failed`);
@@ -1423,6 +1462,7 @@ Queued renames keep applying even after a reload \u2014 you can cancel them from
     let fromTitle = 0;
     for (const a of items) {
       n++;
+      showProgress("Renaming", n - 1, items.length);
       let sourceName = a.title;
       const srcs = sourceNamesFor(a.id);
       if (srcs && srcs.length > 0) sourceName = srcs.length === 1 ? srcs[0] : `${srcs[0]} +${srcs.length - 1}`;
@@ -1449,6 +1489,8 @@ Queued renames keep applying even after a reload \u2014 you can cancel them from
         }
       }
     }
+    showProgress("Renaming", items.length, items.length);
+    removeProgress(1500);
     const bits = [`Renamed ${ok}/${items.length}`];
     if (queued > 0) bits.push(`${queued} queued (applies automatically when ready)`);
     if (fromTitle > 0) bits.push(`${fromTitle} kept their current title (source not in the registry)`);
@@ -1844,7 +1886,7 @@ ${names.join("\n")}`)) return;
 
   // src/content/index.ts
   async function main() {
-    console.info("[nblm-qol] NotebookLM QoL v1.4.0 active");
+    console.info("[nblm-qol] NotebookLM QoL v1.5.0 active");
     init();
     const settings2 = await loadSettings();
     await initUi(settings2);

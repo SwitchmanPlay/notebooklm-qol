@@ -431,3 +431,35 @@ html.nblmqol-hide-overlays .cdk-overlay-container {
   cursor: pointer;
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
 }
+
+/* v1.5: bulk operation progress indicator */
+#nblmqol-progress {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147483100;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(32, 33, 36, 0.97);
+  color: #e8eaed;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font: 400 13px/1.4 "Google Sans", Roboto, sans-serif;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+}
+#nblmqol-progress .nblmqol-progress-track {
+  width: 140px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+}
+#nblmqol-progress .nblmqol-progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 3px;
+  background: #8ab4f8;
+  transition: width 0.2s ease;
+}

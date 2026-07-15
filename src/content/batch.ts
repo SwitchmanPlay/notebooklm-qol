@@ -228,6 +228,10 @@ export async function tryApplyRenames(): Promise<void> {
     const dayAgo = Date.now() - 24 * 3600 * 1000
     const keep: PendingRename[] = []
     let changed = false
+    // v1.5: make background auto-renames visible - ui.ts shows a progress bar
+    // for the nblmqol-rename-progress events emitted below.
+    const mineTotal = all.filter((r) => r.notebookId === notebookId && r.createdAt >= dayAgo).length
+    let appliedNow = 0
     for (const r of all) {
       if (r.createdAt < dayAgo) {
         changed = true
@@ -255,11 +259,14 @@ export async function tryApplyRenames(): Promise<void> {
       try {
         await adapter.renameArtifact(r.artifactId, r.name)
         changed = true
+        appliedNow++
+        window.dispatchEvent(new CustomEvent("nblmqol-rename-progress", { detail: { applied: appliedNow, total: mineTotal } }))
         await sleep(400)
       } catch {
         keep.push(r) // still generating / didn't stick - retry on next tick
       }
     }
+    if (appliedNow > 0) window.dispatchEvent(new CustomEvent("nblmqol-rename-progress", { detail: { done: true } }))
     if (changed || keep.length !== all.length) await setLocal(KEYS.renames, keep)
   } finally {
     applyingRenames = false
