@@ -77,7 +77,7 @@ There is no official NotebookLM API; everything works through the DOM plus passi
 
 ## Changelog
 
-- **1.5.0** — live progress bar at the bottom of the screen for bulk downloads, bulk renames and background auto-renames.
+- **1.5.0** — live progress bar at the bottom of the screen for bulk downloads, bulk renames and background auto-renames; refreshed project icon.
 - **1.4.0** — instant renames: batch auto-renames and ���rename by source” now use NotebookLM's own rename call instead of simulating menu clicks and typing (the DOM flow is kept as automatic fallback).
 - **1.3.1** — direct downloads are now verified (HTML error pages are detected, cancelled and automatically retried via the click path); README refresh.
 - **1.3.0** — instant network-based bulk downloads (audio/video/infographic/slide deck); fixed quizzes being labeled "Flashcards" in renames; Cancel button while a batch is being sent; collapsible queue panel; debug logging off.

@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "NotebookLM QoL",
+  "name": "NotebookLM QoL - Batch Generate/Delete/Rename",
   "version": "1.5.0",
   "description": "Quality-of-life tools for NotebookLM: batch generate per source, rename outputs, bulk download/delete for outputs and sources.",
   "minimum_chrome_version": "120",
@@ -54,6 +54,7 @@
   },
   "icons": {
     "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   }
