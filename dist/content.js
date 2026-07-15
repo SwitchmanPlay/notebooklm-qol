@@ -323,9 +323,34 @@
     return openMenu(more);
   }
   var normalizeTitle = (s) => s.replace(/\s+/g, " ").trim().toLowerCase();
+  var renameReqCounter = 0;
+  function networkRename(id, newName) {
+    const reqId = `r${++renameReqCounter}-${Date.now()}`;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        window.removeEventListener("nblmqol-rename-result", onResult);
+        resolve(false);
+      }, 6e3);
+      function onResult(e) {
+        const d = e.detail ?? {};
+        if (d.reqId !== reqId) return;
+        clearTimeout(timer);
+        window.removeEventListener("nblmqol-rename-result", onResult);
+        resolve(!!d.ok);
+      }
+      window.addEventListener("nblmqol-rename-result", onResult);
+      window.dispatchEvent(new CustomEvent("nblmqol-rename-request", { detail: { reqId, artifactId: id, title: newName } }));
+    });
+  }
   async function renameArtifact(id, newName) {
     const a = findArtifact(id);
     if (!a) throw new Error(`Artifact not found: ${id}`);
+    if (await networkRename(id, newName)) {
+      const row = findArtifact(id);
+      const titleEl = row ? $(SEL.artifactTitle, row.el) : null;
+      if (titleEl && row && !$(SEL.artifactTitleInput, row.el)) titleEl.textContent = newName;
+      return;
+    }
     const menu = await openArtifactMenu(a);
     const clicked = await clickMenuItemOptional(menu, LABELS.artifactRename);
     if (!clicked) {
@@ -1819,7 +1844,7 @@ ${names.join("\n")}`)) return;
 
   // src/content/index.ts
   async function main() {
-    console.info("[nblm-qol] NotebookLM QoL v1.3.1 active");
+    console.info("[nblm-qol] NotebookLM QoL v1.4.0 active");
     init();
     const settings2 = await loadSettings();
     await initUi(settings2);

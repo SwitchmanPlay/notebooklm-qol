@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NotebookLM QoL",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "Quality-of-life tools for NotebookLM: batch generate per source, rename outputs, bulk download/delete for outputs and sources.",
   "minimum_chrome_version": "120",
   "host_permissions": [

@@ -227,9 +227,54 @@ type ParsedRequest = { sourceIds: string[]; outer: unknown[] }
 
   const origFetch = window.fetch
 
+  // v1.4: template of the page's most recent authenticated batchexecute POST.
+  // We reuse its URL params (bl, authuser, source-path) and auth token to
+  // build our own rename requests - always fresh, no token scraping needed.
+  let lastBatchexecute: { url: string; body: string } | null = null
+  const captureBatchexecute = (url: string, body: unknown): void => {
+    if (typeof body !== "string") return
+    if (url.indexOf("/data/batchexecute") === -1) return
+    if (!/(^|&)at=/.test(body)) return
+    lastBatchexecute = { url, body }
+  }
+
+  // v1.4: network rename via NotebookLM's own rename RPC (instant, no menu
+  // clicks, no focus stealing). The content script asks via
+  // nblmqol-rename-request and gets nblmqol-rename-result back; on failure it
+  // falls back to the DOM rename path.
+  const RENAME_RPC = "rc3d8d"
+  window.addEventListener("nblmqol-rename-request", (e: Event) => {
+    const d = ((e as CustomEvent).detail ?? {}) as { reqId?: string; artifactId?: string; title?: string }
+    void (async () => {
+      let ok = false
+      try {
+        if (!lastBatchexecute || !d.artifactId || typeof d.title !== "string") throw new Error("no captured request to build from")
+        const at = /(?:^|&)at=([^&]+)/.exec(lastBatchexecute.body)?.[1]
+        if (!at) throw new Error("no auth token captured")
+        const u = new URL(lastBatchexecute.url, location.origin)
+        u.searchParams.set("rpcids", RENAME_RPC)
+        u.searchParams.set("_reqid", String(Math.floor(9e5 * Math.random()) + 1e5))
+        const freq = JSON.stringify([[[RENAME_RPC, JSON.stringify([[d.artifactId, d.title], [["title"]]]), null, "generic"]]])
+        const r = await origFetch.call(window, u.toString(), {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/x-www-form-urlencoded;charset=UTF-8" },
+          body: `f.req=${encodeURIComponent(freq)}&at=${at}`, // `at` stays URL-encoded exactly as captured
+        })
+        const text = await r.text()
+        ok = r.ok && text.indexOf('"wrb.fr"') !== -1
+        dbg(`network rename ${String(d.artifactId).slice(0, 8)} -> "${d.title}": ${ok ? "OK" : `FAILED HTTP ${r.status}`}`)
+      } catch (err) {
+        dbg("network rename failed:", err)
+      }
+      emit("nblmqol-rename-result", { reqId: d.reqId, ok })
+    })()
+  })
+
   window.fetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : (input as Request).url
     if (url.indexOf("batchexecute") === -1) return origFetch.call(window, input as RequestInfo, init)
+    if (typeof init?.body === "string") captureBatchexecute(url, init.body)
 
     if (splitActive() && url.indexOf(STUDIO_RPC) !== -1 && init?.body) {
       const bodyText = typeof init.body === "string" ? init.body : await new Blob([init.body as BlobPart]).text()
@@ -306,6 +351,7 @@ type ParsedRequest = { sourceIds: string[]; outer: unknown[] }
   proto.send = function (this: TaggedXhr, body?: Document | XMLHttpRequestBodyInit | null) {
     const url = this._nqUrl ?? ""
     if (url.indexOf("batchexecute") !== -1) {
+      captureBatchexecute(url, body)
       this.addEventListener("load", () => {
         try {
           if (typeof this.responseText === "string") tapResponseText(this.responseText)

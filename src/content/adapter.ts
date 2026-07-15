@@ -134,9 +134,42 @@ async function openArtifactMenu(a: ArtifactInfo): Promise<HTMLElement> {
 
 const normalizeTitle = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase()
 
+// v1.4: rename through NotebookLM's own rename RPC (sent by the MAIN-world
+// interceptor). Instant, nothing is clicked, no focus stealing, and it works
+// even while the list re-renders. Resolves false when the interceptor could
+// not build/send the request - the caller then uses the DOM path below.
+let renameReqCounter = 0
+function networkRename(id: string, newName: string): Promise<boolean> {
+  const reqId = `r${++renameReqCounter}-${Date.now()}`
+  return new Promise<boolean>((resolve) => {
+    const timer = setTimeout(() => {
+      window.removeEventListener("nblmqol-rename-result", onResult)
+      resolve(false)
+    }, 6000)
+    function onResult(e: Event): void {
+      const d = ((e as CustomEvent).detail ?? {}) as { reqId?: string; ok?: boolean }
+      if (d.reqId !== reqId) return
+      clearTimeout(timer)
+      window.removeEventListener("nblmqol-rename-result", onResult)
+      resolve(!!d.ok)
+    }
+    window.addEventListener("nblmqol-rename-result", onResult)
+    window.dispatchEvent(new CustomEvent("nblmqol-rename-request", { detail: { reqId, artifactId: id, title: newName } }))
+  })
+}
+
 export async function renameArtifact(id: string, newName: string): Promise<void> {
   const a = findArtifact(id)
   if (!a) throw new Error(`Artifact not found: ${id}`)
+  // v1.4: network-first. On success, patch the visible title right away -
+  // NotebookLM's own store catches up on its next poll, and a reload always
+  // shows the server-side truth.
+  if (await networkRename(id, newName)) {
+    const row = findArtifact(id)
+    const titleEl = row ? $(SEL.artifactTitle, row.el) : null
+    if (titleEl && row && !$(SEL.artifactTitleInput, row.el)) titleEl.textContent = newName
+    return
+  }
   const menu = await openArtifactMenu(a)
   const clicked = await clickMenuItemOptional(menu, LABELS.artifactRename)
   if (!clicked) {
