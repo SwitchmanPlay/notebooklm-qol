@@ -50,7 +50,7 @@ type ParsedRequest = { sourceIds: string[]; outer: unknown[] }
     1: "Audio Overview",
     2: "Report",
     3: "Video Overview",
-    4: "Flashcards", // v1.3: quiz & flashcards SHARE code 4 - subtype detected below
+    4: "Flashcards", // v1.3: quiz, flashcards (and since v1.6 mind maps) SHARE code 4 - subtype detected below
     7: "Infographic",
     8: "Slide Deck",
     9: "Data Table",
@@ -125,14 +125,16 @@ type ParsedRequest = { sourceIds: string[]; outer: unknown[] }
             if (!Array.isArray(a) || a.length < 5 || typeof a[0] !== "string") continue
             const typeCode = a[2] as number
             // v1.3: quiz & flashcards share NotebookLM type code 4. The
-            // subtype lives in the options tuple: a[9][1][0] = 1 (flashcards)
-            // or 2 (quiz). Fall back to "Flashcards" when unreadable.
+            // subtype lives in the options tuple: a[9][1][0] = 1 (flashcards),
+            // 2 (quiz) or - since Sept 2026 - 4 (mind map). Fall back to
+            // "Flashcards" when unreadable.
             let typeLabel = TYPE_BY_CODE[typeCode] ?? `type ${typeCode}`
             try {
               if (typeCode === 4 && Array.isArray(a[9]) && Array.isArray((a[9] as unknown[])[1])) {
                 const sub = ((a[9] as unknown[])[1] as unknown[])[0]
                 if (sub === 2) typeLabel = "Quiz"
                 else if (sub === 1) typeLabel = "Flashcards"
+                else if (sub === 4) typeLabel = "Mind Map"
               }
             } catch {
               /* the label is a nice-to-have */
@@ -405,6 +407,9 @@ type ParsedRequest = { sourceIds: string[]; outer: unknown[] }
     return (origSend as any).apply(this, arguments)
   }
 
+  // v1.6: the DOM is shared between worlds, so this marker lets the content
+  // script's health check (popup) confirm the interceptor actually loaded.
+  document.documentElement.dataset.nblmqolNet = "1"
   console.info("[nblm-qol] network interceptor active")
 })()
 

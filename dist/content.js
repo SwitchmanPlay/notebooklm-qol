@@ -218,7 +218,9 @@
     flowchart: "Mind Map",
     handyman: "Reports",
     lab_profile: "Reports",
+    auto_tab_group: "Reports",
     table: "Data Table",
+    table_view: "Data Table",
     emoji_objects: "Infographic",
     stacked_bar_chart: "Infographic"
   };
@@ -1188,9 +1190,9 @@
   var selectedArtifacts = /* @__PURE__ */ new Set();
   var missingSince = /* @__PURE__ */ new Map();
   function ensureStudioUi() {
+    ensureBatchButton();
     if (!settings?.features.studioBulk) return;
     const items = listArtifacts();
-    if (items.length === 0) return;
     for (const a of items) {
       if (!a.id || a.el.querySelector(".nblmqol-check")) continue;
       const box = document.createElement("input");
@@ -1229,7 +1231,6 @@
     }
     ensureBulkBar();
     ensureStudioHeader();
-    ensureBatchButton();
   }
   function ensureBulkBar() {
     const total = listArtifacts().filter((a) => a.id).length;
@@ -1295,6 +1296,42 @@
       const count = head.querySelector(".nblmqol-count");
       if (count) count.textContent = sel > 0 ? `${sel}/${total} selected` : "";
       refreshPendingBadge();
+      refreshTypeOptions();
+    }
+  }
+  function selectOutputsOfType(type) {
+    let n = 0;
+    for (const a of listArtifacts()) {
+      if (!a.id || a.type !== type) continue;
+      selectedArtifacts.add(a.id);
+      a.el.classList.add("nblmqol-selected");
+      const rb = a.el.querySelector(".nblmqol-check");
+      if (rb) rb.checked = true;
+      n++;
+    }
+    updateBulkBar();
+    toast(`Selected ${n} \xD7 ${type}`);
+  }
+  function refreshTypeOptions() {
+    const sel = document.getElementById("nblmqol-typesel");
+    if (!sel) return;
+    const counts = /* @__PURE__ */ new Map();
+    for (const a of listArtifacts()) if (a.id) counts.set(a.type, (counts.get(a.type) ?? 0) + 1);
+    const types = [...counts.entries()].sort(([x], [y]) => x.localeCompare(y));
+    const sig = types.map(([t, c]) => `${t}:${c}`).join("|");
+    if (sel.dataset.sig === sig) return;
+    sel.dataset.sig = sig;
+    sel.style.display = types.length > 1 ? "" : "none";
+    sel.textContent = "";
+    const head = document.createElement("option");
+    head.value = "";
+    head.textContent = "Select type\u2026";
+    sel.appendChild(head);
+    for (const [t, c] of types) {
+      const o = document.createElement("option");
+      o.value = t;
+      o.textContent = `${t} (${c})`;
+      sel.appendChild(o);
     }
   }
   function setAllOutputs(on) {
@@ -1349,7 +1386,16 @@
       const pend = btn("", () => void cancelQueuedRenames(), "nblmqol-ghost nblmqol-mini");
       pend.id = "nblmqol-pendbtn";
       pend.style.display = "none";
-      head.append(lab, el("span", "nblmqol-count", ""), pend);
+      const typeSel = document.createElement("select");
+      typeSel.id = "nblmqol-typesel";
+      typeSel.title = "Add all outputs of one type to the selection";
+      typeSel.addEventListener("click", (e) => e.stopPropagation());
+      typeSel.addEventListener("change", () => {
+        const type = typeSel.value;
+        typeSel.value = "";
+        if (type) selectOutputsOfType(type);
+      });
+      head.append(lab, typeSel, el("span", "nblmqol-count", ""), pend);
       lab.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -1885,8 +1931,35 @@ ${names.join("\n")}`)) return;
   }
 
   // src/content/index.ts
+  function healthReport() {
+    const count = (f) => {
+      try {
+        return f().length;
+      } catch {
+        return -1;
+      }
+    };
+    return {
+      ok: true,
+      version: chrome.runtime.getManifest?.().version ?? "?",
+      host: location.host,
+      notebook: !!currentNotebookId(),
+      interceptor: document.documentElement.dataset.nblmqolNet === "1",
+      registry: size(),
+      sources: count(listSources),
+      artifacts: count(listArtifacts),
+      createButtons: count(listCreateOptions)
+    };
+  }
   async function main() {
-    console.info("[nblm-qol] NotebookLM QoL v1.5.0 active");
+    try {
+      chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+        if (msg?.type === "health") sendResponse(healthReport());
+        return false;
+      });
+    } catch {
+    }
+    console.info(`[nblm-qol] NotebookLM QoL v${chrome.runtime.getManifest?.().version ?? "?"} active on ${location.host}`);
     init();
     const settings2 = await loadSettings();
     await initUi(settings2);

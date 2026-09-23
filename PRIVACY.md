@@ -1,6 +1,6 @@
 # Privacy Policy — NotebookLM QoL
 
-**Last updated: July 16, 2026**
+**Last updated: September 23, 2026**
 
 NotebookLM QoL ("the extension") is an open-source browser extension that adds quality-of-life features to Google NotebookLM. This policy describes what data the extension handles and where it goes.
 
@@ -8,7 +8,7 @@ NotebookLM QoL ("the extension") is an open-source browser extension that adds q
 
 - The extension collects **no personal data**.
 - **Nothing you do is sent to the developer or to any third party.** There are no analytics, no telemetry, no error reporting, no accounts, and no servers operated by this project.
-- All communication happens exclusively between your browser and **notebooklm.google.com** (and Google's own file-hosting domains when you download your files) — the same communication that happens when you use NotebookLM normally.
+- All communication happens exclusively between your browser and **notebook.google.com** (formerly notebooklm.google.com) (and Google's own file-hosting domains when you download your files) — the same communication that happens when you use NotebookLM normally.
 
 ## What the extension stores
 
@@ -22,16 +22,16 @@ This data never leaves your device. Uninstalling the extension deletes it.
 
 ## How the extension interacts with NotebookLM
 
-- The extension runs **only** on notebooklm.google.com.
+- The extension runs **only** on notebook.google.com and its former address notebooklm.google.com.
 - It reads the responses NotebookLM's own web app receives (titles, generation status, download links of **your** outputs) to power renaming, progress display, and direct downloads. This processing happens entirely inside your browser tab.
-- When you use batch generation, renaming, or bulk download, the extension sends requests to notebooklm.google.com **on your behalf, using your existing Google session** — the same requests the NotebookLM page itself would send if you clicked manually. Your session credentials are never read out, stored, or transmitted anywhere else.
+- When you use batch generation, renaming, or bulk download, the extension sends requests to notebook.google.com **on your behalf, using your existing Google session** — the same requests the NotebookLM page itself would send if you clicked manually. Your session credentials are never read out, stored, or transmitted anywhere else.
 
 ## Permissions explained
 
 - **storage** — save your settings and queue state locally.
 - **downloads** — save your bulk-downloaded files, auto-renamed, into a `NotebookLM/` folder in your Downloads.
 - **notifications** — optional desktop notification when a batch finishes.
-- **Host access to notebooklm.google.com** — required for every feature; the extension does not run anywhere else.
+- **Host access to notebook.google.com and notebooklm.google.com** (NotebookLM's new and former addresses) — required for every feature; the extension does not run anywhere else.
 
 ## What the extension does NOT do
 

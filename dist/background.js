@@ -82,7 +82,7 @@
       }
       const now = Date.now();
       while (expected.length && now - expected[0].at > 9e4) expected.shift();
-      const fromNotebookLM = /notebooklm\.google\.com|googleusercontent\.com|usercontent\.google\.com|docs\.google\.com/.test(
+      const fromNotebookLM = /notebook(?:lm)?\.google\.com|googleusercontent\.com|usercontent\.google\.com|docs\.google\.com/.test(
         String(item.url ?? "") + String(item.referrer ?? "")
       );
       const next = expected.shift();

@@ -1,6 +1,7 @@
 /**
  * SINGLE source of truth for every DOM selector / label used by the extension.
- * All selectors were extracted from real NotebookLM captures (July 2026, English UI).
+ * All selectors were extracted from real NotebookLM captures (July 2026, English UI)
+ * and re-verified on notebook.google.com ("Gemini Notebook", Sept 2026).
  * Nothing outside this file may touch raw selectors.
  */
 
@@ -78,7 +79,9 @@ export const ICON_TO_TYPE: Record<string, string> = {
   flowchart: "Mind Map",
   handyman: "Reports",
   lab_profile: "Reports",
+  auto_tab_group: "Reports",
   table: "Data Table",
+  table_view: "Data Table",
   emoji_objects: "Infographic",
   stacked_bar_chart: "Infographic",
 }

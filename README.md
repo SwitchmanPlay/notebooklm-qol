@@ -2,7 +2,7 @@
 
 # ⚡ NotebookLM QoL — Batch Generate / Delete / Rename
 
-![Version](https://img.shields.io/badge/version-1.5.0-blue)
+![Version](https://img.shields.io/badge/version-1.6.0-blue)
 ![Price](https://img.shields.io/badge/price-100%25_free-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Chrome](https://img.shields.io/badge/Chrome-120%2B-ffc107)
@@ -10,6 +10,8 @@
 ![Tracking](https://img.shields.io/badge/tracking-none-success)
 
 **The quality-of-life upgrades NotebookLM is missing — made by a student, for students.** 🎓
+
+> 🆕 **NotebookLM is now “Gemini Notebook” at `notebook.google.com`.** v1.6 supports the new address (the old one keeps working too). If the extension “stopped doing anything” for you, update to 1.6 and reload your notebook tab.
 
 Generate a quiz for *every* chapter in one go. Rename ten “Untitled quiz” after their sources automatically. Download everything with one click — and watch it happen on a live progress bar. Fully free, open source, no account, no tracking.
 
@@ -51,6 +53,7 @@ The extension splits your single request into one generation **per source** at t
 
 - **Multi-select Studio outputs** — always-visible checkboxes, a clickable **Select all outputs** header, plus an always-on bulk bar with a live count, one-click bulk **download** and bulk **delete** (single confirmation). Selection is tracked by artifact id, so it survives list reordering and re-renders.
 - **Instant bulk download** 🚀 — audio, video, infographics and slide decks are downloaded **directly via the file URLs found in NotebookLM's own responses**: instant, no menu clicking, and the items don't even need to be scrolled into view. Files land auto-renamed in a `NotebookLM/` folder in Downloads. If a direct URL doesn't check out (the extension verifies the server is sending a real file, not an error page), it automatically falls back to clicking NotebookLM's own Download menu. Reports always use the click path; quizzes, flashcards and mind maps have no download in NotebookLM at all and are skipped with a toast.
+- **Select by type** 🎯 *(new in v1.6)* — a **Select type…** dropdown next to *Select all outputs* adds every output of one type (e.g. all Audio Overviews) to the selection, ready for bulk download or delete.
 - **Live progress bar** 📊 *(new in v1.5)* — bulk downloads, bulk renames and the background auto-renames after a batch all show a progress bar at the bottom of the screen (“Downloading 3/7…”, “Renaming 2/5…”, “Auto-renaming 4/10…”) instead of running invisibly.
 - **Batch queue panel** — the legacy queue panel (bottom right) shows per-job progress with **Stop after current** / **Resume**, survives reloads, and can be **collapsed** off-screen with the **»** button — a small **« Batch** tab on the screen edge brings it back.
 
@@ -62,7 +65,7 @@ Check sources (NotebookLM's own select-all works fine), then **Delete checked** 
 
 ## 🔒 Privacy
 
-No analytics. No servers. No accounts. The only host permission is `notebooklm.google.com`, and all data stays in your browser. Full policy: [PRIVACY.md](PRIVACY.md).
+No analytics. No servers. No accounts. The only host permissions are `notebook.google.com` and the old `notebooklm.google.com`, and all data stays in your browser. Full policy: [PRIVACY.md](PRIVACY.md).
 
 ---
 
@@ -75,7 +78,9 @@ No analytics. No servers. No accounts. The only host permission is `notebooklm.g
 1. Download / unzip this folder.
 2. Open `chrome://extensions`, enable **Developer mode** (top right).
 3. Click **Load unpacked** and select this folder.
-4. Open NotebookLM — you'll see checkboxes in the Studio panel and a *⚡ Batch generate…* button under the create buttons.
+4. Open NotebookLM ([notebook.google.com](https://notebook.google.com)) — you'll see checkboxes in the Studio panel and a *⚡ Batch generate…* button under the create buttons.
+
+> 🩺 **Something not showing up?** Click the extension icon: the popup runs a health check on the current tab and shows which parts are working (content script, network data, sources panel, Studio buttons).
 
 > ⚠️ After updating the extension, **reload any open NotebookLM tabs** — Chrome invalidates the old content script and buttons would otherwise fail with “Extension context invalidated”.
 
@@ -102,14 +107,14 @@ There is no official NotebookLM API; everything works through the DOM plus passi
 
 ---
 
-## ⚠️ Known limitations (v1.5)
+## ⚠️ Known limitations (v1.6)
 
 - **Auto-renames apply only once a generation has finished** — NotebookLM rejects renames on in-progress items, so a rename can land a few seconds after the item appears. Since v1.4 the rename itself is an instant network call; if a visible title ever looks stale, a reload shows the server-side truth.
-- **Bulk downloads:** Chrome blocks multiple automatic downloads by default. The first time, click **Allow** on Chrome's “download multiple files” prompt (or allow it under Site settings → Automatic downloads for notebooklm.google.com), otherwise only the first file arrives.
+- **Bulk downloads:** Chrome blocks multiple automatic downloads by default. The first time, click **Allow** on Chrome's “download multiple files” prompt (or allow it under Site settings → Automatic downloads for notebook.google.com), otherwise only the first file arrives.
 - **Quizzes, flashcards and mind maps have no Download option in NotebookLM at all** — bulk download skips them and says so in a toast. Reports download via the click path (the item must be visible in the Studio list).
 - Batch **language** applies reliably to titles and Audio Overviews; Video Overview *content* may still come out in English — that appears to be a NotebookLM-side limitation, not an extension bug.
 - Renaming old outputs made from **many** sources names them after the first source plus `+N` (e.g. `Ch02.pdf +6 — Quiz`).
-- **Rename by source** needs the artifact data captured since the last page load; if you get a “no source data captured yet” toast, reload the page and let the Studio list load first. Mind Maps aren't covered by the network registry yet and fall back to their current title.
+- **Rename by source** needs the artifact data captured since the last page load; if you get a “no source data captured yet” toast, reload the page and let the Studio list load first.
 - Duplicate detection is title-based (URL-based matching is implemented and tested in `src/lib/dedupe.ts`, but NotebookLM's source list doesn't expose URLs in the DOM).
 - Bulk download triggers individual downloads (auto-renamed) rather than a single ZIP.
 - Source-selection persistence and dashboard bulk-delete of notebooks are planned for a future version.
@@ -118,6 +123,7 @@ There is no official NotebookLM API; everything works through the DOM plus passi
 
 ## 📜 Changelog
 
+- **1.6.0** 🩹 — **fix: the extension did nothing on the new NotebookLM address.** Google renamed NotebookLM to *Gemini Notebook* and moved it to `notebook.google.com`; the extension now runs there (and still on the old domain). Also fixed: the ⚡ *Batch generate* button never appeared in notebooks that had no Studio outputs yet. New: health check in the popup, **Select type…** dropdown for bulk actions, correct labels for mind maps (they now share a type code with quizzes/flashcards) and the new Reports / Data Table icons.
 - **1.5.0** 📊 — live progress bar at the bottom of the screen for bulk downloads, bulk renames and background auto-renames; refreshed project icon.
 - **1.4.0** ⚡ — instant renames: batch auto-renames and “rename by source” now use NotebookLM's own rename call instead of simulating menu clicks and typing (the DOM flow is kept as automatic fallback).
 - **1.3.1** 🛡️ — direct downloads are now verified (HTML error pages are detected, cancelled and automatically retried via the click path); README refresh.

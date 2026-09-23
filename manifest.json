@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "NotebookLM QoL - Batch Generate/Delete/Rename",
-  "version": "1.5.0",
-  "description": "Quality-of-life tools for NotebookLM: batch generate per source, rename outputs, bulk download/delete for outputs and sources.",
+  "version": "1.6.0",
+  "description": "NotebookLM / Gemini Notebook tools: batch generate per source, rename outputs, bulk download/delete outputs and sources.",
   "minimum_chrome_version": "120",
   "host_permissions": [
-    "https://notebooklm.google.com/*"
+    "https://notebook.google.com/*",
+        "https://notebooklm.google.com/*"
   ],
   "permissions": [
     "storage",
@@ -18,6 +19,7 @@
   "content_scripts": [
     {
       "matches": [
+        "https://notebook.google.com/*",
         "https://notebooklm.google.com/*"
       ],
       "js": [
@@ -27,6 +29,7 @@
     },
     {
       "matches": [
+        "https://notebook.google.com/*",
         "https://notebooklm.google.com/*"
       ],
       "js": [
@@ -44,6 +47,7 @@
         "dist/interceptor.js"
       ],
       "matches": [
+        "https://notebook.google.com/*",
         "https://notebooklm.google.com/*"
       ]
     }

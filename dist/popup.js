@@ -105,6 +105,74 @@
       $(id).addEventListener("change", save);
     }
   }
+  var HOST_RE = /^https:\/\/notebook(lm)?\.google\.com\//;
+  function setStatus(kind, title, detail = "", items = []) {
+    const box = document.getElementById("status");
+    box.className = `status ${kind}`.trim();
+    box.textContent = "";
+    const t = document.createElement("strong");
+    t.textContent = title;
+    box.appendChild(t);
+    if (detail) box.appendChild(document.createTextNode(detail));
+    if (items.length) {
+      const ul = document.createElement("ul");
+      for (const [label, good] of items) {
+        const li = document.createElement("li");
+        li.textContent = `${good ? "\u2713" : "\u2717"} ${label}`;
+        if (!good) li.className = "miss";
+        ul.appendChild(li);
+      }
+      box.appendChild(ul);
+    }
+  }
+  async function checkHealth() {
+    let tab;
+    try {
+      ;
+      [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    } catch {
+    }
+    if (!tab?.id || !HOST_RE.test(String(tab.url ?? ""))) {
+      setStatus("", "Not on NotebookLM", "Open a notebook on notebook.google.com to use the tools.");
+      return;
+    }
+    const health = await new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(null), 1500);
+      try {
+        chrome.tabs.sendMessage(tab.id, { type: "health" }, (r) => {
+          clearTimeout(timer);
+          void chrome.runtime.lastError;
+          resolve(r ?? null);
+        });
+      } catch {
+        clearTimeout(timer);
+        resolve(null);
+      }
+    });
+    if (!health) {
+      setStatus("bad", "Not running on this tab", "Reload the NotebookLM tab (needed after installing or updating the extension).");
+      return;
+    }
+    if (!health.notebook) {
+      setStatus("ok", "Active", "Open a notebook to see the Studio and source tools.");
+      return;
+    }
+    const items = [
+      [`Sources panel (${health.sources})`, health.sources > 0],
+      [`Studio create buttons (${health.createButtons})`, health.createButtons > 0],
+      [`Studio outputs (${health.artifacts})`, true],
+      [`Network data (${health.registry} outputs seen)`, health.interceptor]
+    ];
+    const broken = items.filter(([, good]) => !good).length;
+    if (broken === 0) setStatus("ok", "All systems go", "", items);
+    else
+      setStatus(
+        "warn",
+        "Partly working",
+        " NotebookLM may have changed its page. Reload the tab; if it persists, please open an issue on GitHub.",
+        items
+      );
+  }
   function renderPreview() {
     const el = document.getElementById("preview");
     try {
@@ -114,4 +182,6 @@
     }
   }
   main();
+  document.getElementById("version").textContent = `v${chrome.runtime.getManifest().version}`;
+  void checkHealth();
 })();

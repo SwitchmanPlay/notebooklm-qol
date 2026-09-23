@@ -54,6 +54,18 @@
   accent-color: #8ab4f8;
   cursor: pointer;
 }
+#nblmqol-studiohead select {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid rgba(128, 134, 139, 0.45);
+  border-radius: 12px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+#nblmqol-studiohead select option {
+  color: #202124;
+}
 #nblmqol-studiohead .nblmqol-count {
   font-weight: 400;
   margin-left: auto;

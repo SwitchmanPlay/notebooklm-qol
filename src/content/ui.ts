@@ -126,9 +126,14 @@ const selectedArtifacts = new Set<string>()
 const missingSince = new Map<string, number>()
 
 export function ensureStudioUi(): void {
+  // v1.6: the batch button has its own feature flag and must also appear in a
+  // notebook with ZERO Studio outputs - it used to sit behind the early return
+  // below, so fresh notebooks (the main batch use case) never showed it.
+  ensureBatchButton()
   if (!settings?.features.studioBulk) return
+  // No early return on an empty list: ensureBulkBar / ensureStudioHeader
+  // remove their UI themselves when the last output is gone.
   const items = adapter.listArtifacts()
-  if (items.length === 0) return
 
   for (const a of items) {
     if (!a.id || a.el.querySelector(".nblmqol-check")) continue
@@ -173,7 +178,6 @@ export function ensureStudioUi(): void {
   }
   ensureBulkBar()
   ensureStudioHeader()
-  ensureBatchButton()
 }
 
 /**
@@ -262,6 +266,47 @@ function updateBulkBar(): void {
     const count = head.querySelector<HTMLElement>(".nblmqol-count")
     if (count) count.textContent = sel > 0 ? `${sel}/${total} selected` : ""
     refreshPendingBadge()
+    refreshTypeOptions()
+  }
+}
+
+/** v1.6: add every output of one type to the selection (additive). */
+function selectOutputsOfType(type: string): void {
+  let n = 0
+  for (const a of adapter.listArtifacts()) {
+    if (!a.id || a.type !== type) continue
+    selectedArtifacts.add(a.id)
+    a.el.classList.add("nblmqol-selected")
+    const rb = a.el.querySelector<HTMLInputElement>(".nblmqol-check")
+    if (rb) rb.checked = true
+    n++
+  }
+  updateBulkBar()
+  toast(`Selected ${n} × ${type}`)
+}
+
+/** Keep the type dropdown's options in sync with the list; rebuilt only when
+ * the set of types/counts changes (never on every observer tick). */
+function refreshTypeOptions(): void {
+  const sel = document.getElementById("nblmqol-typesel") as HTMLSelectElement | null
+  if (!sel) return
+  const counts = new Map<string, number>()
+  for (const a of adapter.listArtifacts()) if (a.id) counts.set(a.type, (counts.get(a.type) ?? 0) + 1)
+  const types = [...counts.entries()].sort(([x], [y]) => x.localeCompare(y))
+  const sig = types.map(([t, c]) => `${t}:${c}`).join("|")
+  if (sel.dataset.sig === sig) return
+  sel.dataset.sig = sig
+  sel.style.display = types.length > 1 ? "" : "none"
+  sel.textContent = ""
+  const head = document.createElement("option")
+  head.value = ""
+  head.textContent = "Select type…"
+  sel.appendChild(head)
+  for (const [t, c] of types) {
+    const o = document.createElement("option")
+    o.value = t
+    o.textContent = `${t} (${c})`
+    sel.appendChild(o)
   }
 }
 
@@ -328,7 +373,18 @@ function ensureStudioHeader(): void {
     const pend = btn("", () => void cancelQueuedRenames(), "nblmqol-ghost nblmqol-mini")
     pend.id = "nblmqol-pendbtn"
     pend.style.display = "none"
-    head.append(lab, el("span", "nblmqol-count", ""), pend)
+    // v1.6: "select by type" - adds every output of one type (e.g. all Audio
+    // Overviews) to the selection, so bulk download/delete by type is 2 clicks.
+    const typeSel = document.createElement("select")
+    typeSel.id = "nblmqol-typesel"
+    typeSel.title = "Add all outputs of one type to the selection"
+    typeSel.addEventListener("click", (e) => e.stopPropagation())
+    typeSel.addEventListener("change", () => {
+      const type = typeSel.value
+      typeSel.value = ""
+      if (type) selectOutputsOfType(type)
+    })
+    head.append(lab, typeSel, el("span", "nblmqol-count", ""), pend)
     // v0.6: clicking the TEXT toggles too, not just the 16px checkbox. We
     // compute the target state ourselves and preventDefault so the native
     // label toggle and Angular's handlers can't fight us.

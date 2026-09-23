@@ -31,10 +31,19 @@
       .saved { color: #188038; font-size: 12px; height: 14px; margin-top: 8px; }
       hr { border: none; border-top: 1px solid rgba(128,134,139,.3); margin: 14px 0; }
       a { color: #8ab4f8; }
+      .status { border-radius: 10px; padding: 8px 10px; font-size: 12px; background: rgba(128,134,139,.12); }
+      .status strong { display: block; margin-bottom: 2px; }
+      .status.ok { background: rgba(24,128,56,.12); }
+      .status.warn { background: rgba(249,171,0,.16); }
+      .status.bad { background: rgba(217,48,37,.12); }
+      .status ul { margin: 4px 0 0; padding-left: 16px; }
+      .status li.miss { color: #d93025; }
+      @media (prefers-color-scheme: dark) { .status li.miss { color: #f28b82; } }
     </style>
   </head>
   <body>
-    <h1>NotebookLM QoL</h1>
+    <h1>NotebookLM QoL <span id="version" style="font-weight:400;opacity:.6;font-size:12px"></span></h1>
+    <div class="status" id="status">Checking this tab…</div>
 
     <label class="field" for="template">Rename template</label>
     <input type="text" id="template" />

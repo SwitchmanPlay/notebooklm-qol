@@ -9,7 +9,7 @@
       2: "Report",
       3: "Video Overview",
       4: "Flashcards",
-      // v1.3: quiz & flashcards SHARE code 4 - subtype detected below
+      // v1.3: quiz, flashcards (and since v1.6 mind maps) SHARE code 4 - subtype detected below
       7: "Infographic",
       8: "Slide Deck",
       9: "Data Table",
@@ -76,6 +76,7 @@
                   const sub = a[9][1][0];
                   if (sub === 2) typeLabel = "Quiz";
                   else if (sub === 1) typeLabel = "Flashcards";
+                  else if (sub === 4) typeLabel = "Mind Map";
                 }
               } catch {
               }
@@ -307,6 +308,7 @@
       }
       return origSend.apply(this, arguments);
     };
+    document.documentElement.dataset.nblmqolNet = "1";
     console.info("[nblm-qol] network interceptor active");
   })();
 })();

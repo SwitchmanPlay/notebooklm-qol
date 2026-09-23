@@ -4,7 +4,7 @@
  * Download renaming trick: the content script cannot control the filename of
  * NotebookLM's native downloads, but the background can. Right before the
  * content script clicks "Download", it sends { type: "expectDownload", name }.
- * When a download from notebooklm.google.com / googleusercontent.com starts
+ * When a download from notebook(lm).google.com / googleusercontent.com starts
  * within the next 90s, we suggest the desired filename (keeping the original
  * extension) inside a "NotebookLM/" subfolder of Downloads.
  */
@@ -130,7 +130,7 @@ chrome.downloads.onDeterminingFilename?.addListener(
     const now = Date.now()
     while (expected.length && now - expected[0].at > 90_000) expected.shift()
 
-    const fromNotebookLM = /notebooklm\.google\.com|googleusercontent\.com|usercontent\.google\.com|docs\.google\.com/.test(
+    const fromNotebookLM = /notebook(?:lm)?\.google\.com|googleusercontent\.com|usercontent\.google\.com|docs\.google\.com/.test(
       String(item.url ?? "") + String(item.referrer ?? ""),
     )
     const next = expected.shift()
