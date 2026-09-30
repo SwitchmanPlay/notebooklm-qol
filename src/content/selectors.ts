@@ -5,12 +5,13 @@
  * Nothing outside this file may touch raw selectors.
  */
 
+
 export const SEL = {
   // ---- Source panel ----
   sourceRow: ".single-source-container",
   sourceRowTitle: ".source-title",
   sourceCheckboxInput: ".select-checkbox-container input.mdc-checkbox__native-control",
-  selectAllSourcesInput: 'input[aria-label="Select all sources"]',
+  selectAllSourcesInput: '.select-checkbox-all-sources input',
   // id encodes the source uuid: source-item-more-button-<uuid>
   sourceMoreButton: 'button[id^="source-item-more-button-"]',
 
@@ -23,7 +24,7 @@ export const SEL = {
   artifactTitleInput: "input.artifact-title-input",
   artifactDetails: ".artifact-details",
   artifactIcon: "mat-icon.artifact-icon",
-  artifactMoreButton: 'button[aria-label="More"]',
+  artifactMoreButton: '.artifact-more-button button',
   artifactActions: ".artifact-actions",
   // "Create" buttons grid in the Studio panel
   createButtonHost: "basic-create-artifact-button",
@@ -38,14 +39,14 @@ export const SEL = {
   snackbarLabel: ".mat-mdc-snack-bar-label, .mdc-snackbar__label",
 
   // ---- Customize dialog (configurable-form-dialog) ----
-  customizeButton: 'button[aria-label^="Customize "]',
+  customizeButton: '.can-customize',
   configDialog: "configurable-form-dialog",
   controlWrapper: ".control-wrapper",
   controlLabel: ".control-label",
   radioButton: "mat-radio-button",
   tileLabelContainer: ".tile-label-container",
   dialogActionsButton: "mat-dialog-actions button",
-  dialogCloseButton: 'button[aria-label="Close dialog"]',
+  dialogCloseButton: '[fonticonname="close"] button',
 
   // ---- "View prompt and sources" dialog (source-attribution-dialog) ----
   attributionDialog: "source-attribution-dialog",
@@ -97,3 +98,4 @@ export function artifactIdFromLabels(id: string | null | undefined): string | nu
   const m = id.match(/^artifact-labels-(.+)$/)
   return m ? m[1] : null
 }
+
